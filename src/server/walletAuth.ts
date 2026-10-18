@@ -1,15 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { getAddress, isAddress, recoverMessageAddress, type Address } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
-import { provenance } from '../domain/chog';
+import provenance from '../../fixtures/genesis/provenance.json' with { type: 'json' };
 
 const COOKIE = 'chogmog_session';
 const CHALLENGE_MS = 5 * 60_000;
 const SESSION_MS = 30 * 60_000;
 const MAX_ENTRIES = 512;
 
-interface Challenge { address: Address; message: string; expiresAt: number }
-interface Session { address: Address; expiresAt: number }
+interface Challenge { address: Address; origin: string; message: string; expiresAt: number }
+interface Session { address: Address; origin: string; expiresAt: number }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const random = (bytes: number) => randomBytes(bytes).toString('hex');
 
@@ -27,7 +27,7 @@ export class MemoryAuthStore {
     const message = createSiweMessage({ address, domain: url.host, uri: origin, chainId: provenance.chainId,
       version: '1', nonce, issuedAt: new Date(now), expirationTime: new Date(expiresAt),
       statement: 'Sign in to Chogmog. No transaction, NFT approval or ownership claim.' });
-    this.challenges.set(digest(nonce), { address, message, expiresAt });
+    this.challenges.set(digest(nonce), { address, origin, message, expiresAt });
     return { nonce, message, expiresAt: new Date(expiresAt).toISOString() };
   }
 
@@ -38,18 +38,19 @@ export class MemoryAuthStore {
     return challenge && challenge.expiresAt > now ? challenge : null;
   }
 
-  start(address: Address, now: number) {
+  start(address: Address, origin: string, now: number) {
     for (const [key, entry] of this.sessions) if (entry.expiresAt <= now) this.sessions.delete(key);
     if (this.sessions.size >= MAX_ENTRIES) throw new AuthError(429, 'Too many sessions');
     const credential = random(32), expiresAt = now + SESSION_MS;
-    this.sessions.set(digest(credential), { address, expiresAt });
+    this.sessions.set(digest(credential), { address, origin, expiresAt });
     return { credential, expiresAt };
   }
 
-  read(credential: string | null, now: number): Session | null {
+  read(credential: string | null, origin: string, now: number): Session | null {
     if (!credential || !/^[a-f0-9]{64}$/.test(credential)) return null;
     const key = digest(credential), session = this.sessions.get(key);
     if (!session || session.expiresAt <= now) { this.sessions.delete(key); return null; }
+    if (session.origin !== origin) return null;
     return session;
   }
 
@@ -117,7 +118,7 @@ export function parseWalletAddress(value: string): Address {
 }
 
 export function readSession(request: Request, store: MemoryAuthStore, now = Date.now()) {
-  return store.read(sessionCookie(request), now);
+  return store.read(sessionCookie(request), new URL(request.url).origin, now);
 }
 
 export async function authResponse(request: Request, store: MemoryAuthStore, expectedOrigin: string, now = Date.now()): Promise<Response> {
@@ -142,14 +143,14 @@ export async function authResponse(request: Request, store: MemoryAuthStore, exp
       case 'verify': {
         const input = await body(request, ['nonce', 'message', 'signature']);
         const challenge = store.take(input.nonce, now);
-        if (!challenge || input.message !== challenge.message ||
+        if (!challenge || challenge.origin !== expectedOrigin || input.message !== challenge.message ||
             !/^0x[a-fA-F0-9]{130}$/.test(input.signature)) throw new AuthError(401, 'Sign-in denied');
         let signer: Address;
         try { signer = await recoverMessageAddress({ message: challenge.message, signature: input.signature as `0x${string}` }); }
         catch { throw new AuthError(401, 'Sign-in denied'); }
         if (signer !== challenge.address) throw new AuthError(401, 'Sign-in denied');
         store.revoke(sessionCookie(request));
-        const session = store.start(signer, now);
+        const session = store.start(signer, expectedOrigin, now);
         return jsonResponse({ address: signer, expiresAt: new Date(session.expiresAt).toISOString() }, 200,
           { 'Set-Cookie': cookie(session.credential, expectedOrigin, SESSION_MS / 1000) });
       }

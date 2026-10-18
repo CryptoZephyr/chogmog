@@ -2,7 +2,8 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { createServer } from 'vite';
 import { describe, expect, test } from 'vitest';
 import { provenance } from '../src/domain/chog';
-import { freshOwnership, ownerResponse, type OwnershipReader } from '../src/chain/genesisOwnership';
+import { freshOwnership, type OwnershipReader } from '../src/chain/genesisOwnership';
+import { ownerResponse } from '../src/server/ownershipRoute';
 import { authResponse, MemoryAuthStore } from '../src/server/walletAuth';
 import serverlessAuth from '../api/auth';
 import serverlessOwner from '../api/owner';
@@ -123,6 +124,19 @@ describe('one-time domain-bound wallet authentication', () => {
     expect(success.headers.get('set-cookie')).toContain('; Secure');
     expect((await authResponse(request('/api/auth?op=verify', 'POST', { nonce: c.nonce, message: c.message, signature }), store, secureOrigin)).status).toBe(403);
   });
+
+  test('a challenge and session issued for one origin cannot be redeemed at another', async () => {
+    const otherOrigin = 'https://other.example', store = new MemoryAuthStore(), signer = account();
+    const c = await challenge(store, signer.address);
+    const signature = await signer.signMessage({ message: c.message });
+    const verify = new Request(`${otherOrigin}/api/auth?op=verify`, { method: 'POST',
+      headers: { Origin: otherOrigin, 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce: c.nonce, message: c.message, signature }) });
+    expect((await authResponse(verify, store, otherOrigin)).status).toBe(401);
+    const { response } = await login(store, signer);
+    const cookie = response.headers.get('set-cookie')!;
+    const result = await authResponse(new Request(`${otherOrigin}/api/auth`, { headers: { Cookie: cookie } }), store, otherOrigin);
+    expect((await result.json()).address).toBeNull();
+  });
 });
 
 describe('fresh Genesis ownership uses only the signed-in session', () => {
@@ -152,7 +166,9 @@ describe('fresh Genesis ownership uses only the signed-in session', () => {
     const reorg = fakeReader(signer.address); reorg.reorg();
     const outage = fakeReader(signer.address); outage.fail();
     const stale = fakeReader(signer.address, BigInt(Math.floor(Date.now() / 1000) - 120));
-    for (const source of [wrong, reorg, outage, stale]) {
+    const unknown = fakeReader(signer.address);
+    unknown.reader.block = async () => ({ number: 123n, hash: null, timestamp: BigInt(Math.floor(Date.now() / 1000)) });
+    for (const source of [wrong, reorg, outage, stale, unknown]) {
       const result = await ownerResponse(request('/api/owner?token=846', 'GET', undefined, cookie), store, source.reader, origin);
       expect(result.status).toBe(503);
       expect(await result.json()).toEqual({ error: 'Ownership unavailable' });
@@ -167,6 +183,18 @@ describe('fresh Genesis ownership uses only the signed-in session', () => {
       expect((await ownerResponse(request(`/api/owner?token=${encodeURIComponent(token)}`, 'GET', undefined, cookie), store,
         fakeReader(signer.address).reader, origin)).status).toBe(400);
     }
+  });
+
+  test('sign-out during an ownership read invalidates the pending result', async () => {
+    const signer = account(), store = new MemoryAuthStore(), { response } = await login(store, signer);
+    const cookie = response.headers.get('set-cookie')!, source = fakeReader(signer.address);
+    const readURI = source.reader.tokenURI;
+    source.reader.tokenURI = async (...args) => {
+      await authResponse(request('/api/auth?op=logout', 'POST', undefined, cookie), store, origin);
+      return readURI(...args);
+    };
+    const result = await ownerResponse(request('/api/owner?token=846', 'GET', undefined, cookie), store, source.reader, origin);
+    expect(result.status).toBe(401);
   });
 
   test('T3 pins require exact chain, collection, token ID and current on-chain URI', async () => {

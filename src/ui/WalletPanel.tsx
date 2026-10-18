@@ -27,6 +27,7 @@ export function WalletPanel() {
 
   useEffect(() => {
     let live = true;
+    const initialSequence = sequence.current;
     const wallet = injected();
     const walletChanged = () => {
       sequence.current++;
@@ -36,22 +37,25 @@ export function WalletPanel() {
     wallet?.on?.('accountsChanged', walletChanged);
     wallet?.on?.('chainChanged', walletChanged);
     void api('/api/auth').then(async (session) => {
-      if (!live || !session.address || typeof session.address !== 'string') {
-        if (live) setStatus('No wallet session. The chain stays free to play.');
+      if (!live || sequence.current !== initialSequence) return;
+      if (!session.address || typeof session.address !== 'string') {
+        setStatus('No wallet session. The chain stays free to play.');
         return;
       }
       const accounts = wallet ? await wallet.request({ method: 'eth_accounts' }) : [];
       const chain = wallet ? await wallet.request({ method: 'eth_chainId' }) : '';
-      if (live && Array.isArray(accounts) && accounts.some((item) => typeof item === 'string' && item.toLowerCase() === (session.address as string).toLowerCase()) && chain === '0x8f') {
+      if (!live || sequence.current !== initialSequence) return;
+      if (Array.isArray(accounts) && accounts.some((item) => typeof item === 'string' && item.toLowerCase() === (session.address as string).toLowerCase()) && chain === '0x8f') {
         setAddress(session.address); setStatus('Signed in on Monad. NFT ownership is checked only when requested.');
-      } else if (live) walletChanged();
-    }).catch(() => { if (live) setStatus('Wallet sign-in is unavailable. Free play still works.'); });
+      } else walletChanged();
+    }).catch(() => { if (live && sequence.current === initialSequence) setStatus('Wallet sign-in is unavailable. Free play still works.'); });
     return () => { live = false; wallet?.removeListener?.('accountsChanged', walletChanged); wallet?.removeListener?.('chainChanged', walletChanged); };
   }, []);
 
   const signIn = async () => {
     const wallet = injected();
     if (!wallet) { setStatus('No injected wallet found. Install or open a compatible wallet to sign in.'); return; }
+    sequence.current++;
     setBusy(true); setAddress(null); setObservation(null);
     try {
       await api('/api/auth?op=logout', 'POST');
@@ -76,12 +80,14 @@ export function WalletPanel() {
 
   const checkOwnership = async () => {
     if (!address) return;
+    const cycle = sequence.current;
     setBusy(true); setObservation(null);
     try {
       const result = await api(`/api/owner?token=${encodeURIComponent(selectedToken)}`);
+      if (cycle !== sequence.current) return;
       if (result.tokenId !== selectedToken || typeof result.isOwner !== 'boolean' || typeof result.blockNumber !== 'string') throw new Error('Invalid ownership observation');
       setObservation(`Token ${result.tokenId}: ${result.isOwner ? 'this signed-in address owns it' : 'this signed-in address does not own it'} at Monad block ${result.blockNumber}. This is a read-only observation, not publishing permission.`);
-    } catch (error) { setObservation(error instanceof Error ? error.message : 'Ownership check unavailable.'); }
+    } catch (error) { if (cycle === sequence.current) setObservation(error instanceof Error ? error.message : 'Ownership check unavailable.'); }
     finally { setBusy(false); }
   };
 
@@ -96,7 +102,7 @@ export function WalletPanel() {
       }).catch(() => setStatus('Sign-out failed. Retry before leaving this device.')); }}>Sign out</button>
     </div>
     <label>Genesis token ID
-      <input type="text" inputMode="numeric" maxLength={78} value={selectedToken} onChange={(event) => { setSelectedToken(event.target.value); setObservation(null); }} />
+      <input type="text" inputMode="numeric" maxLength={78} disabled={busy} value={selectedToken} onChange={(event) => { setSelectedToken(event.target.value); setObservation(null); }} />
     </label>
     <button disabled={busy || !address || !/^(0|[1-9][0-9]*)$/.test(selectedToken)} onClick={() => void checkOwnership()}>Check current ownership</button>
     {observation && <p role="status">{observation}</p>}

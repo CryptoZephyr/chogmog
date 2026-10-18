@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config';
 import type { Plugin, ViteDevServer } from 'vite';
 import { sourceResponse } from './src/server/sourceCache.ts';
 import { authResponse, errorResponse, jsonResponse, MemoryAuthStore } from './src/server/walletAuth.ts';
-import { genesisReader, ownerResponse } from './src/chain/genesisOwnership.ts';
+import { genesisReader } from './src/chain/genesisOwnership.ts';
+import { ownerResponse } from './src/server/ownershipRoute.ts';
 
 function previewSources(): Plugin {
   const store = new MemoryAuthStore();

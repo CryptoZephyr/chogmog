@@ -2,8 +2,11 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 import type { Plugin, ViteDevServer } from 'vite';
 import { sourceResponse } from './src/server/sourceCache.ts';
+import { authResponse, errorResponse, jsonResponse, MemoryAuthStore } from './src/server/walletAuth.ts';
+import { genesisReader, ownerResponse } from './src/chain/genesisOwnership.ts';
 
 function previewSources(): Plugin {
+  const store = new MemoryAuthStore();
   const configure = (server: Pick<ViteDevServer, 'middlewares'>) => {
     server.middlewares.use('/api/source', (req, res, next) => {
       if (req.url?.split('?')[0] !== '/' && !req.url?.startsWith('?')) {
@@ -16,6 +19,22 @@ function previewSources(): Plugin {
           res.writeHead(response.status, Object.fromEntries(response.headers));
           res.end(Buffer.from(await response.arrayBuffer()));
         }).catch(next);
+    });
+    for (const path of ['/api/auth', '/api/owner']) server.middlewares.use(path, (req, res) => {
+      const host = req.headers.host;
+      let response: Promise<Response>;
+      try {
+        const origin = new URL(`http://${host}`);
+        if (!['localhost', '127.0.0.1'].includes(origin.hostname)) throw new Error('Local development only');
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        const url = `${origin.origin}${path}${req.url?.replace(/^\//, '') ?? ''}`;
+        const request = new Request(url, { method: req.method, headers,
+          ...(req.method === 'POST' ? { body: req as unknown as ReadableStream<Uint8Array>, duplex: 'half' } : {}) } as RequestInit & { duplex?: 'half' });
+        response = path === '/api/auth' ? authResponse(request, store, origin.origin) : ownerResponse(request, store, genesisReader, origin.origin);
+      } catch { response = Promise.resolve(jsonResponse({ error: 'Local auth unavailable' }, 503)); }
+      void response.then(async (reply) => { res.writeHead(reply.status, Object.fromEntries(reply.headers)); res.end(Buffer.from(await reply.arrayBuffer())); })
+        .catch((error: unknown) => { const reply = errorResponse(error); res.writeHead(reply.status, Object.fromEntries(reply.headers)); res.end(Buffer.from('')); });
     });
   };
   return { name: 'pinned-genesis-previews', configureServer: configure, configurePreviewServer: configure };

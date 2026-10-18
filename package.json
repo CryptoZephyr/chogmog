@@ -18,13 +18,15 @@
     "test:chain": "vitest run tests/chain.test.ts",
     "test:sources": "vitest run tests/sources.test.ts tests/artwork.test.ts",
     "test:domain": "vitest run tests/documents.test.ts",
+    "test:wallet": "vitest run tests/walletAuth.test.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "0.21.0",
     "pixi.js": "8.22.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "viem": "2.38.6"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

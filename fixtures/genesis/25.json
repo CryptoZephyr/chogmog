@@ -1,0 +1,47 @@
+{
+  "name": "CHOG #25",
+  "description": "CHOG — a 1969-piece collection on Monad.",
+  "image": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/25.webp",
+  "attributes": [
+    {
+      "trait_type": "Background",
+      "value": "Coral Pink"
+    },
+    {
+      "trait_type": "Base",
+      "value": "Origin"
+    },
+    {
+      "trait_type": "Skin",
+      "value": "Origin"
+    },
+    {
+      "trait_type": "Side",
+      "value": "Left"
+    },
+    {
+      "trait_type": "Body",
+      "value": "Toad pink suit"
+    },
+    {
+      "trait_type": "Mouth",
+      "value": "BTC Coin"
+    },
+    {
+      "trait_type": "Eyes",
+      "value": "cyan laser"
+    },
+    {
+      "trait_type": "Form",
+      "value": "Chog"
+    },
+    {
+      "trait_type": "Tier",
+      "value": "Uncommon"
+    },
+    {
+      "trait_type": "Naked",
+      "value": "No"
+    }
+  ]
+}

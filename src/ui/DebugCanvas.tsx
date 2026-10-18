@@ -83,7 +83,8 @@ export function DebugCanvas() {
         {view ? `Tick ${view.snapshot.tick}/${MAX_TICKS} | ${(view.snapshot.tick * FIXED_STEP).toFixed(2)} s | Ball (${view.snapshot.ball.x.toFixed(2)}, ${view.snapshot.ball.y.toFixed(2)}) m | ${view.snapshot.bodyCount} bodies`
           : 'Waiting for the engine'}
       </output>
-      <p>Next: authentic source metadata and safe artwork checks, then the trait-powered first chain.</p>
+      <p>This is the original T0 regression harness. It does not use the source traits connected in the first-chain preview.</p>
+      <p><a href="/">Open the trait-powered chain preview</a></p>
     </main>
   );
 }

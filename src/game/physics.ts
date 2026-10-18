@@ -7,7 +7,7 @@ import {
 type Rapier = typeof import('@dimforge/rapier2d-compat');
 let enginePromise: Promise<Rapier> | undefined;
 
-function loadEngine(): Promise<Rapier> {
+export function loadEngine(): Promise<Rapier> {
   enginePromise ??= import('@dimforge/rapier2d-compat').then(async (engine) => {
     await engine.init();
     return engine;

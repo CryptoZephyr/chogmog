@@ -1,0 +1,14 @@
+:root { font-family: system-ui, sans-serif; color: #222; background: #fff; }
+body { margin: 0; }
+main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+h1, h2 { margin-bottom: 0.5rem; }
+p { line-height: 1.5; }
+button, input { font: inherit; }
+button { padding: 0.5rem 1rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+fieldset { margin: 1rem 0; padding: 1rem; }
+label { display: block; margin-bottom: 0.75rem; }
+input[type="range"] { display: block; width: min(100%, 24rem); }
+.canvas-host { width: 100%; aspect-ratio: 3 / 2; border: 1px solid #999; box-sizing: border-box; }
+.canvas-host canvas { display: block; width: 100% !important; height: auto !important; }
+output { display: block; margin-top: 0.75rem; font-family: monospace; }

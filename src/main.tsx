@@ -1,11 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { DebugCanvas } from './ui/DebugCanvas';
+import './ui/debug.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <main>
-      <h1>Chogmog</h1>
-      <p>Development harness. Final product UI is not designed yet.</p>
-    </main>
+    <DebugCanvas />
   </StrictMode>,
 );

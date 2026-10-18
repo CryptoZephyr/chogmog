@@ -1,3 +1,3 @@
-import { jsonResponse } from '../src/server/walletAuth';
+import { deployedResponse } from '../src/server/backend';
 
-export default { fetch: async () => jsonResponse({ error: 'Ownership access requires a deployed authentication store' }, 503) };
+export default { fetch: deployedResponse };

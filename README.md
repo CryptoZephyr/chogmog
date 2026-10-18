@@ -4,7 +4,7 @@ Make mischief move.
 
 This private repository contains the T0 physics foundation and a T1/T2 first-chain preview using authentic Genesis metadata and artwork. The playable sequence is ball release, laser sensor, balloon pop, physical confetti lift, portal, lever contact and a chosen message. It supports Run/Pause/Reset, source swaps, geometry edits and local arrangement recovery.
 
-T0 and T1/T2 passed recorded local Chrome acceptance, with the new chain checked at b670a57. T3 adds validated, immutable part/scene formats and canonical content IDs. T4 adds a local wallet sign-in and read-only current-ownership check. Production authentication requires the shared session/nonce store in T5. Genuine holder publication, durable public machines, payments and production deployment are not connected. Public-data previews prove neither ownership nor holder permission.
+T0 and T1/T2 passed recorded local Chrome acceptance, with the new chain checked at b670a57. T3 adds validated, immutable part/scene formats and canonical content IDs. T4 adds local wallet sign-in and read-only current-ownership checks. T5 adds the shared Postgres auth/publication backend described below. Hosted activation, holder authoring UI, genuine holder publication, general machine playback and production deployment remain unverified. Public-data previews prove neither ownership nor holder permission.
 
 The owner controls final visual design. Do not change repository visibility without explicit owner approval. No public source licence has been granted.
 
@@ -28,12 +28,49 @@ pnpm test:chain
 pnpm test:sources
 pnpm test:domain
 pnpm test:wallet
+pnpm test:backend
 pnpm build
 # All checks, in order:
 pnpm check
 ```
 
 Clean-checkout acceptance uses `pnpm install --frozen-lockfile` followed by `pnpm check`. GitHub Actions runs those commands on Node 24. There are no additional pre-commit hooks.
+
+## Shared backend and publication API, T5
+
+`PostgresStore` implements shared one-time challenge consumption, digest-only sessions, revocation, content-bound publication grants and immutable version storage. SQL transactions serialize competing idempotency keys, check the active session and grant, write the version and source credits, and consume the grant together. Failure rolls everything back. Database constraints and triggers enforce content hashes, uniqueness and immutable published records. `anon` and `authenticated` have no schema/table access, and RLS has no client policies. Browser access is through the API only, not Supabase Auth or direct database writes.
+
+The migration runs only when explicitly invoked. It never starts from an HTTP request. Use a dedicated hosted Supabase database and its server-only Postgres/pooler connection with `sslmode=verify-full`, not another application's credentials. If its certificate chain requires the official Supabase CA, configure `NODE_EXTRA_CA_CERTS` with that public CA. Never use `no-verify` or disable certificate verification. No local Postgres or Docker is required or allowed for this project.
+
+Set these only in the server environment, never with a `VITE_` prefix:
+
+```text
+APP_ORIGIN=https://your-exact-chogmog-domain.example
+CHOGMOG_DATABASE_URL=<dedicated Supabase connection, TLS verify-full>
+CHOGMOG_BACKEND_ENABLED=false
+```
+
+After securely supplying the dedicated connection, run `pnpm db:migrate`. It checks migration checksums and applies each file once in a transaction. The migration role owns the isolated `chogmog` schema. Keep database statement/parameter logging disabled for auth and publication queries. Never log cookies, signed messages, signatures, connection strings or request bodies. Expired sign-in/session rows are pruned on the next issuance. Expired publication grants are pruned on the next prepare. Receipts and published history remain immutable. Pending grants store only scope/message metadata, not unpublished content.
+
+Only enable `CHOGMOG_BACKEND_ENABLED=true` after migration, grant checks and hosted integration acceptance. The backend requires exact HTTPS `APP_ORIGIN`, verified Supabase TLS and the expected migration version. Missing configuration or unavailable storage returns 503, without falling back to memory or exposing internal errors. No Chogmog hosted database has been provisioned or enabled yet. The existing Vite harness retains memory-only development sign-in and returns 503 for publication, leaving free play and local drafts usable.
+
+The frozen v1 routes are:
+
+| Route | Input and result |
+| --- | --- |
+| `GET /api/auth`, `POST /api/auth?op=challenge\|verify\|logout` | Existing wallet protocol, now backed by shared state when enabled. |
+| `GET /api/owner?token=533` | Existing fresh authenticated ownership observation. Never a publication grant. |
+| `POST /api/publish?op=prepare` | `{content, key}`. Validate exact T3 part/machine, authenticated author, trusted source pins and registry. Return `{nonce, message, versionId, expiresAt, summary}` for a separate gas-free EOA signature. |
+| `POST /api/publish?op=commit` | `{content, key, nonce, signature}`. Revalidate content, exact issued message scope and session, refresh part ownership, then atomically persist. Return the immutable version, observation, timestamp and credits. |
+| `GET /api/versions?id=sha256:...` | Public readback of one exact committed version and original credits. No private grants, sessions or drafts. |
+
+Use a random 16-64 character alphanumeric/underscore/hyphen `key` for an operation, retaining it for retries. A key with different content returns 409. The same key and content returns the original version. After an uncertain response, a still-authenticated original author may recover the original receipt even after the grant expires or is cleaned up. Receipt recovery cannot create or alter work and does not require renewed NFT ownership. New publications always require a fresh signed authorization.
+
+The publication message binds operation, kind, work ID, author, chain 143, exact origin, content hash, idempotency key, nonce and five-minute expiry. It is separate from sign-in and bound to that session. No raw signature or session credential is stored. Part prepare and commit independently read `ownerOf` and `tokenURI`. Commit rejects observations older than ten seconds at the database boundary and records their block/hash. Blockchain observations and database commits cannot be atomic, so transfers or reorganizations after the final observation remain a documented race. Source ownership changes do not rewrite historical authors or credits.
+
+The trusted source resolver currently supports only the two hash-verified authentic metadata snapshots. It supplies metadata, never ownership. Deployed publication always uses the real chain adapter. Synthetic test ownership/registries are never wired into production. Machine publication requires actual committed reusable parts and a direct Chog action connection, without requiring the machine author to hold an NFT. Structural publication does not establish causal replay. General authoring/playback, drafts, discovery and real-holder acceptance remain later tasks.
+
+`pnpm test:backend` runs fast API negatives locally, with the Postgres suite explicitly skipped without its isolated database. GitHub Actions supplies PostgreSQL 17 and `CHOGMOG_TEST_DATABASE_URL`, requires that variable, migrates twice and runs the same full check with real transactions, concurrency, rollback, cross-instance reads and database role/immutability tests. CI uses synthetic wallets and ownership, never genuine-holder evidence or a production service. `pg@8.16.3` and its types are exact-pinned. `pnpm-workspace.yaml` overrides `ws` to patched `8.21.0` for the existing wallet dependencies.
 
 ## First-chain preview
 

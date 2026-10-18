@@ -8,12 +8,34 @@ const CHALLENGE_MS = 5 * 60_000;
 const SESSION_MS = 30 * 60_000;
 const MAX_ENTRIES = 512;
 
-interface Challenge { address: Address; origin: string; message: string; expiresAt: number }
-interface Session { address: Address; origin: string; expiresAt: number }
-const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+export interface Challenge { address: Address; origin: string; message: string; expiresAt: number }
+export interface Session { address: Address; origin: string; expiresAt: number }
+export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const random = (bytes: number) => randomBytes(bytes).toString('hex');
 
-export class MemoryAuthStore {
+type Asyncable<T> = T | Promise<T>;
+export interface AuthStore {
+  issue(address: Address, origin: string, now: number): Asyncable<{ nonce: string; message: string; expiresAt: string }>;
+  take(nonce: string, now: number): Asyncable<Challenge | null>;
+  start(address: Address, origin: string, now: number): Asyncable<{ credential: string; expiresAt: number }>;
+  read(credential: string | null, origin: string, now: number): Asyncable<Session | null>;
+  revoke(credential: string | null): Asyncable<void>;
+}
+
+export function newChallenge(address: Address, origin: string, now: number) {
+  const nonce = random(16), expiresAt = now + CHALLENGE_MS;
+  const url = new URL(origin);
+  const message = createSiweMessage({ address, domain: url.host, uri: origin, chainId: provenance.chainId,
+    version: '1', nonce, issuedAt: new Date(now), expirationTime: new Date(expiresAt),
+    statement: 'Sign in to Chogmog. No transaction, NFT approval or ownership claim.' });
+  return { nonce, address, origin, message, expiresAt };
+}
+
+export function newSession(address: Address, origin: string, now: number) {
+  return { credential: random(32), address, origin, expiresAt: now + SESSION_MS };
+}
+
+export class MemoryAuthStore implements AuthStore {
   private challenges = new Map<string, Challenge>();
   private sessions = new Map<string, Session>();
 
@@ -22,11 +44,7 @@ export class MemoryAuthStore {
     if (this.challenges.size >= MAX_ENTRIES || [...this.challenges.values()].filter((c) => c.address === address).length >= 3) {
       throw new AuthError(429, 'Too many pending sign-ins');
     }
-    const nonce = random(16), expiresAt = now + CHALLENGE_MS;
-    const url = new URL(origin);
-    const message = createSiweMessage({ address, domain: url.host, uri: origin, chainId: provenance.chainId,
-      version: '1', nonce, issuedAt: new Date(now), expirationTime: new Date(expiresAt),
-      statement: 'Sign in to Chogmog. No transaction, NFT approval or ownership claim.' });
+    const { nonce, message, expiresAt } = newChallenge(address, origin, now);
     this.challenges.set(digest(nonce), { address, origin, message, expiresAt });
     return { nonce, message, expiresAt: new Date(expiresAt).toISOString() };
   }
@@ -41,7 +59,7 @@ export class MemoryAuthStore {
   start(address: Address, origin: string, now: number) {
     for (const [key, entry] of this.sessions) if (entry.expiresAt <= now) this.sessions.delete(key);
     if (this.sessions.size >= MAX_ENTRIES) throw new AuthError(429, 'Too many sessions');
-    const credential = random(32), expiresAt = now + SESSION_MS;
+    const { credential, expiresAt } = newSession(address, origin, now);
     this.sessions.set(digest(credential), { address, origin, expiresAt });
     return { credential, expiresAt };
   }
@@ -117,11 +135,11 @@ export function parseWalletAddress(value: string): Address {
   return getAddress(value);
 }
 
-export function readSession(request: Request, store: MemoryAuthStore, now = Date.now()) {
+export async function readSession(request: Request, store: AuthStore, now = Date.now()) {
   return store.read(sessionCookie(request), new URL(request.url).origin, now);
 }
 
-export async function authResponse(request: Request, store: MemoryAuthStore, expectedOrigin: string, now = Date.now()): Promise<Response> {
+export async function authResponse(request: Request, store: AuthStore, expectedOrigin: string, now = Date.now()): Promise<Response> {
   try {
     if (new URL(request.url).origin !== expectedOrigin || request.headers.get('sec-fetch-site') === 'cross-site') {
       throw new AuthError(403, 'Origin denied');
@@ -130,7 +148,7 @@ export async function authResponse(request: Request, store: MemoryAuthStore, exp
     if (url.pathname !== '/api/auth' || url.searchParams.size > 1 ||
         [...url.searchParams.keys()].some((key) => key !== 'op')) throw new AuthError(404, 'Unknown route');
     if (request.method === 'GET' && !url.search) {
-      const session = readSession(request, store, now);
+      const session = await readSession(request, store, now);
       return jsonResponse({ address: session?.address ?? null, expiresAt: session ? new Date(session.expiresAt).toISOString() : null });
     }
     if (request.method !== 'POST') throw new AuthError(405, 'Method not allowed');
@@ -138,19 +156,19 @@ export async function authResponse(request: Request, store: MemoryAuthStore, exp
     switch (url.searchParams.get('op')) {
       case 'challenge': {
         const input = await body(request, ['address']);
-        return jsonResponse(store.issue(parseWalletAddress(input.address), expectedOrigin, now));
+        return jsonResponse(await store.issue(parseWalletAddress(input.address), expectedOrigin, now));
       }
       case 'verify': {
         const input = await body(request, ['nonce', 'message', 'signature']);
-        const challenge = store.take(input.nonce, now);
+        const challenge = await store.take(input.nonce, now);
         if (!challenge || challenge.origin !== expectedOrigin || input.message !== challenge.message ||
             !/^0x[a-fA-F0-9]{130}$/.test(input.signature)) throw new AuthError(401, 'Sign-in denied');
         let signer: Address;
         try { signer = await recoverMessageAddress({ message: challenge.message, signature: input.signature as `0x${string}` }); }
         catch { throw new AuthError(401, 'Sign-in denied'); }
         if (signer !== challenge.address) throw new AuthError(401, 'Sign-in denied');
-        store.revoke(sessionCookie(request));
-        const session = store.start(signer, expectedOrigin, now);
+        await store.revoke(sessionCookie(request));
+        const session = await store.start(signer, expectedOrigin, now);
         return jsonResponse({ address: signer, expiresAt: new Date(session.expiresAt).toISOString() }, 200,
           { 'Set-Cookie': cookie(session.credential, expectedOrigin, SESSION_MS / 1000) });
       }
@@ -161,7 +179,7 @@ export async function authResponse(request: Request, store: MemoryAuthStore, exp
           if (chunk.done) break;
           if (chunk.value.byteLength) { await reader.cancel(); throw new AuthError(400, 'Logout takes no body'); }
         }
-        store.revoke(sessionCookie(request));
+        await store.revoke(sessionCookie(request));
         return jsonResponse({ address: null }, 200, { 'Set-Cookie': cookie('', expectedOrigin, 0) });
       }
       default: throw new AuthError(404, 'Unknown route');

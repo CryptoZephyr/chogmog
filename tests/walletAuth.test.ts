@@ -213,8 +213,8 @@ describe('fresh Genesis ownership uses only the signed-in session', () => {
   });
 
   test('undeployed serverless endpoints refuse auth and ownership without shared storage', async () => {
-    expect((await serverlessAuth.fetch()).status).toBe(503);
-    expect((await serverlessOwner.fetch()).status).toBe(503);
+    expect((await serverlessAuth.fetch(new Request(`${origin}/api/auth`))).status).toBe(503);
+    expect((await serverlessOwner.fetch(new Request(`${origin}/api/owner?token=846`))).status).toBe(503);
   });
 
   test('real Vite HTTP routes exchange a one-time signature and reject open paths', async () => {

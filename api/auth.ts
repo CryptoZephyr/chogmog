@@ -1,3 +1,3 @@
-import { jsonResponse } from '../src/server/walletAuth';
+import { deployedResponse } from '../src/server/backend';
 
-export default { fetch: async () => jsonResponse({ error: 'Authentication requires a shared nonce and session store before deployment' }, 503) };
+export default { fetch: deployedResponse };

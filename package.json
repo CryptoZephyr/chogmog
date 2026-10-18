@@ -17,6 +17,7 @@
     "test:physics": "vitest run tests/physics.test.ts",
     "test:chain": "vitest run tests/chain.test.ts",
     "test:sources": "vitest run tests/sources.test.ts tests/artwork.test.ts",
+    "test:domain": "vitest run tests/documents.test.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {

@@ -225,6 +225,7 @@ describe('fresh Genesis ownership uses only the signed-in session', () => {
       if (!listen || typeof listen === 'string') throw new Error('Missing listener');
       const url = `http://127.0.0.1:${listen.port}`;
       const signer = account();
+      expect((await fetch(`${url}/api/auth?op=logout`, { method: 'POST', headers: { Origin: url } })).status).toBe(200);
       const challengeResponse = await fetch(`${url}/api/auth?op=challenge`, { method: 'POST', headers: { Origin: url, 'Content-Type': 'application/json' }, body: JSON.stringify({ address: signer.address }) });
       expect(challengeResponse.status).toBe(200);
       const c = await challengeResponse.json() as { nonce: string; message: string };
@@ -237,6 +238,10 @@ describe('fresh Genesis ownership uses only the signed-in session', () => {
       expect((await session.json()).address).toBe(signer.address);
       expect((await fetch(`${url}/api/auth/extra?op=verify`)).status).toBe(404);
       expect((await fetch(`${url}/api/owner?token=0846`, { headers: { Cookie: cookie } })).status).toBe(400);
+      expect((await fetch(`${url}/api/auth?op=logout`, { method: 'POST', headers: { Origin: url, Cookie: cookie }, body: 'unexpected' })).status).toBe(400);
+      expect((await (await fetch(`${url}/api/auth`, { headers: { Cookie: cookie } })).json()).address).toBe(signer.address);
+      expect((await fetch(`${url}/api/auth?op=logout`, { method: 'POST', headers: { Origin: url, Cookie: cookie } })).status).toBe(200);
+      expect((await (await fetch(`${url}/api/auth`, { headers: { Cookie: cookie } })).json()).address).toBeNull();
     } finally { await vite.close(); }
   });
 });

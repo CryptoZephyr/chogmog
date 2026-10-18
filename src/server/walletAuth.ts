@@ -155,7 +155,12 @@ export async function authResponse(request: Request, store: MemoryAuthStore, exp
           { 'Set-Cookie': cookie(session.credential, expectedOrigin, SESSION_MS / 1000) });
       }
       case 'logout': {
-        if (request.body) throw new AuthError(400, 'Logout takes no body');
+        const reader = request.body?.getReader();
+        if (reader) while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          if (chunk.value.byteLength) { await reader.cancel(); throw new AuthError(400, 'Logout takes no body'); }
+        }
         store.revoke(sessionCookie(request));
         return jsonResponse({ address: null }, 200, { 'Set-Cookie': cookie('', expectedOrigin, 0) });
       }

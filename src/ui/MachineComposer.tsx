@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from '../domain/fallingScene';
-import { PreviewCatalog, loadMachineDraft, newMachineDraft, PREVIEW_ACTIONS, saveMachineDraft,
+import { MACHINE_DRAFT_KEY, loadMachineDraft, newMachineDraft, PREVIEW_ACTIONS, saveMachineDraft,
   type Machine, type PreviewAction } from '../domain/machineDraft';
 import type { Connection, Endpoint, Prop, Scene } from '../domain/documents';
 import { MachineSandbox } from './MachineSandbox';
+import { MachineLibrary, PUBLISHED_DRAFT_KEY } from '../domain/machineLibrary';
+import { api } from './walletClient';
+import { WalletPanel } from './WalletPanel';
+import { MachinePublication } from './MachinePublication';
 
 const storage = {
   getItem: (key: string) => window.localStorage.getItem(key),
@@ -35,8 +39,11 @@ function nextId(scene: Scene, prefix: string): string {
   throw new Error('No available ID');
 }
 
-export function MachineComposer() {
-  const [catalog, setCatalog] = useState<PreviewCatalog | null>(null);
+export function MachineComposer({ publishedMode = false }: { publishedMode?: boolean }) {
+  const [catalog, setCatalog] = useState<MachineLibrary | null>(null);
+  const [partId, setPartId] = useState('');
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const draftKey = publishedMode ? PUBLISHED_DRAFT_KEY : MACHINE_DRAFT_KEY;
   const [machine, setMachine] = useState<Machine | null>(null);
   const [saved, setSaved] = useState(true);
   const [recovered, setRecovered] = useState(true);
@@ -58,20 +65,33 @@ export function MachineComposer() {
   useEffect(() => {
     let active = true;
     mounted.current = true;
-    void PreviewCatalog.create().then(async (preview) => ({ catalog: preview, ...(await loadMachineDraft(storage, preview)) }))
-      .then(({ catalog, machine, recovered }) => {
+    void MachineLibrary.create((id, source) => api(`/api/versions?id=${encodeURIComponent(id)}${source ? '&source=1' : ''}`))
+      .then(async (library) => {
+        const id = publishedMode ? new URLSearchParams(location.search).get('version') : null;
+        if (id) {
+          const reopened = await library.reopen(id);
+          return { catalog: library, machine: reopened.machine, recovered: true, publishedAt: reopened.publishedAt };
+        }
+        return { catalog: library, ...(await loadMachineDraft(storage, library,
+          publishedMode ? () => library.newPublishedDraft() : undefined, draftKey)), publishedAt: null };
+      })
+      .then(({ catalog, machine, recovered, publishedAt }) => {
         if (!active) return;
         draft.current = machine.scene; lastValid.current = machine.scene;
-        setCatalog(catalog); setMachine(machine); setRecovered(recovered); setMessage(machine.scene.message);
-      }).catch(() => { if (active) setError('Public preview sources are unavailable. Reload to try again.'); });
+        setCatalog(catalog); setMachine(machine); setRecovered(recovered); setMessage(machine.scene.message); setPublishedAt(publishedAt);
+      }).catch(() => { if (active) setError('Exact machine or sources unavailable. Your saved draft was not changed. Return to your draft or retry later.'); });
     return () => { active = false; mounted.current = false; };
-  }, []);
+  }, [publishedMode, draftKey]);
 
   const edit = async (change: (draft: Scene) => void) => {
     if (!catalog || !machine || running) return;
     const cycle = ++operation.current;
     const next = structuredClone(draft.current ?? machine.scene);
     try {
+      if (publishedAt) {
+        const remix = catalog.newPublishedDraft();
+        next.machineId = remix.machineId; next.author = remix.author;
+      }
       change(next);
       draft.current = next;
       setBusy(true); setError('');
@@ -80,10 +100,10 @@ export function MachineComposer() {
       const persisted = await saveMachineDraft({ setItem: (key, value) => {
         if (!mounted.current || operation.current !== cycle) throw new Error('Superseded edit');
         storage.setItem(key, value);
-      } }, catalog, valid.scene);
+      } }, catalog, valid.scene, draftKey);
       if (!mounted.current || operation.current !== cycle) return;
       lastValid.current = valid.scene; draft.current = valid.scene;
-      setMachine(valid); setSaved(persisted); setMessage(valid.scene.message);
+      setMachine(valid); setSaved(persisted); setMessage(valid.scene.message); setPublishedAt(null);
     } catch (failure) {
       if (mounted.current && operation.current === cycle) {
         draft.current = lastValid.current;
@@ -103,14 +123,16 @@ export function MachineComposer() {
   return <main>
     <h1>Chogmog</h1>
     <p>Make mischief move.</p>
-    <h2>Free machine composition development harness</h2>
-    <p>No wallet is needed. These pinned parts come from authentic public Genesis snapshots. They are unverified previews, not holder-authored publications or a genuine part catalogue. This neutral editor is not the final product design. Machine publication remains unavailable.</p>
+    <h2>{publishedMode ? 'Published-part machine development harness' : 'Free machine composition development harness'}</h2>
+    <p>{publishedMode ? 'Loading, composing and replaying exact published parts needs no wallet or NFT. Publication requires optional sign-in, never NFT ownership. Parts only appear after genuine holder publication. Local Vite cannot load published parts.' : 'No wallet is needed. These pinned parts come from authentic public Genesis snapshots. They are unverified previews, not holder-authored publications or a genuine part catalogue. Machine publication remains unavailable in preview mode.'} This neutral editor is not the final product design.</p>
     <p><a href="?harness=chain">First-chain preview</a> · <a href="?harness=falling">Original physics harness</a></p>
+    <p><a href={publishedMode ? '?harness=machine' : '?harness=published'}>{publishedMode ? 'Open the wallet-free public-preview builder' : 'Open the published-part builder'}</a>{publishedMode && <> · <a href="?harness=published">Return to your last published-part draft</a></>}</p>
     {!machine || !catalog ? <p role="status">{error || 'Loading pinned preview parts and local draft…'}</p> : <>
-      {!recovered && <p role="alert">The previous local draft could not be read or trusted. A fresh preview draft was opened. No holder authority was restored.</p>}
+      {!recovered && <p role="alert">The previous local draft or its exact sources could not be read or trusted. A fresh draft was opened without overwriting the saved one. No holder authority was restored.</p>}
       {!saved && <p role="alert">Local saving is unavailable. This draft still works in this tab, but a reload may lose your edits.</p>}
       {error && <p role="alert">Change rejected: {error}. Your last valid draft is kept.</p>}
-      <p role="status">{busy ? 'Checking and saving the exact draft…' : saved ? 'Local draft ready' : 'Draft not saved'}. {machine.scene.parts.length} reusable preview parts. No holder authority.</p>
+      <p role="status">{busy ? 'Checking and saving the exact draft…' : saved ? 'Local draft ready' : 'Draft not saved'}. {machine.scene.parts.length} reusable parts. Composition grants no holder authority.</p>
+      {publishedAt && <p className="breakable">Reopened exact published version {machine.id} from {publishedAt}. Editing starts a new machine ID for a remix and leaves the original unchanged.</p>}
       <MachineSandbox key={machine.id} machine={machine} catalog={catalog} onRunning={onRunning} editing={busy} />
       <fieldset disabled={running}>
         <legend>Machine draft, edits rebuild and reset the run</legend>
@@ -126,16 +148,16 @@ export function MachineComposer() {
         </label>
         {!message.trim() && <p role="alert">Enter a message to save a change.</p>}
         <button onClick={() => {
-          if (window.confirm('Replace this local draft with a new preview machine? The current draft will be overwritten.')) {
-            const fresh = newMachineDraft(catalog);
+          if (window.confirm('Replace this local draft with a new machine? The current draft will be overwritten.')) {
+            const fresh = publishedMode ? catalog.newPublishedDraft() : newMachineDraft(catalog);
             void edit((s) => { Object.assign(s, fresh); });
           }
         }}>Start a new local draft</button>
         <p>Draft ID: <code className="breakable">{machine.id}</code>. This is a content hash, not a publication receipt.</p>
       </fieldset>
       <fieldset disabled={running}>
-        <legend>Place and adjust preview parts</legend>
-        <label>Add a pinned source part
+        <legend>Place and adjust exact parts</legend>
+        {!publishedMode && <><label>Add a pinned source part
           <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value as PreviewAction)}>
             {PREVIEW_ACTIONS.map((kind) => <option key={kind} value={kind}>{kind}, token {catalog.get(kind).content.source.nft.tokenId} (public preview)</option>)}
           </select>
@@ -144,12 +166,20 @@ export function MachineComposer() {
           const position = sourceKind === 'release' ? { x: 0, y: 4.5 } : sourceKind === 'laser' ? { x: 3, y: 2 } :
             sourceKind === 'lift' ? { x: 4.5, y: 0 } : sourceKind === 'portal' ? { x: 6.5, y: 0 } : { x: 1, y: 1 };
           s.parts.push({ id: nextId(s, sourceKind), versionId: catalog.get(sourceKind).id, ...position, values: {} });
-        })}>Add preview part</button>
+        })}>Add preview part</button></>}
+        {publishedMode && <>
+          <p>Use an exact committed part ID from its author. No fixture can fill this genuine library. Search and discovery are a later task.</p>
+          <label>Published part version ID<input type="text" maxLength={71} value={partId} disabled={busy} onChange={(e) => setPartId(e.target.value)} /></label>
+          <button disabled={busy || machine.scene.parts.length >= 6 || !/^sha256:[a-f0-9]{64}$/.test(partId)} onClick={() => {
+            const id = partId;
+            void edit((s) => { s.parts.push({ id: nextId(s, 'part'), versionId: id, x: 0, y: 0, values: {} }); });
+          }}>Load and add exact published part</button>
+        </>}
         {machine.scene.parts.map((part) => {
           const entry = machine.expanded.find((item) => item.instanceId === part.id)!;
           const bounds = entry.configured.bounds;
           return <fieldset key={part.id}>
-            <legend>{part.id}: {entry.configured.actions[0].type} from public token {entry.version.content.source.nft.tokenId}</legend>
+            <legend>{part.id}: {entry.configured.actions[0].type}, token {entry.version.content.source.nft.tokenId}, {catalog.isPublished(part.versionId) ? 'holder-published immutable version' : 'unverified public-data preview'}</legend>
             {(['x', 'y'] as const).map((axis) => <label key={axis}>{axis.toUpperCase()} position {part[axis].toFixed(2)}
               <input type="range" min="0" max={axis === 'x' ? WORLD_WIDTH - bounds.width : WORLD_HEIGHT - bounds.height} step="0.25"
                 value={part[axis]} onChange={(e) => void edit((s) => { s.parts.find((p) => p.id === part.id)![axis] = Number(e.target.value); })} />
@@ -224,16 +254,18 @@ export function MachineComposer() {
           <button onClick={() => void edit((s) => { s.inputs = s.inputs.filter((item) => item.id !== input.id); })}>Remove {input.id}</button>
         </li>)}</ul>
       </fieldset>
-      <details><summary>Exact preview source versions and credits</summary>
-        <p>These are local public-data demonstrations. The named account below is a demo placeholder, never a verified holder or a published part author. No real reuse counts are recorded.</p>
+      <details><summary>Exact source versions and credits</summary>
+        <p>Public previews use a demo placeholder, never a verified holder identity. Holder-published versions retain the original author and reuse permission after NFT transfers. A historical publication is not a current-ownership claim. No preview reuse counts are recorded.</p>
         <ul>{machine.expanded.map(({ instanceId, version }) => <li key={instanceId}>
-          {instanceId}: public token {version.content.source.nft.tokenId}, artwork {version.content.source.artworkNumber},
-          {catalog.source(PREVIEW_ACTIONS.find((kind) => catalog.get(kind).id === version.id)!).metadata.name}.
+          {instanceId}: {catalog.isPublished(version.id) ? 'holder-published' : 'public-data preview'}, token {version.content.source.nft.tokenId}, artwork {version.content.source.artworkNumber}.
+          Original author <code>{version.content.author}</code>. Reuse permitted: {String(version.content.reuseAllowed)}.
           Version <code className="breakable">{version.id}</code>. Source metadata SHA-256 <code className="breakable">{version.content.source.metadataSha256}</code>.
           Original source address <code>{version.content.source.nft.collection}</code>.
         </li>)}</ul>
       </details>
-      <p>Drafts stay in this browser. There is no wallet, publication button, genuine catalogue entry or holder credit in this local preview.</p>
+      {publishedMode ? <WalletPanel ownerTools={false}>{(address) =>
+        <MachinePublication key={`${machine.id}:${address}:${running}:${busy}`} machine={machine} library={catalog} address={address} disabled={running || busy} />
+      }</WalletPanel> : <p>Drafts stay in this browser. There is no wallet or publication action in this public preview.</p>}
     </>}
   </main>;
 }

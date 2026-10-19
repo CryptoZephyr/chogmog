@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { MAX_TICKS } from '../domain/fallingScene';
-import type { Machine, PreviewCatalog } from '../domain/machineDraft';
+import type { Machine, DraftCatalog } from '../domain/machineDraft';
 import type { MachineSnapshot } from '../game/machinePreview';
 import type { MachineStage } from '../game/machineStage';
 
 export function MachineSandbox({ machine, catalog, onRunning, editing }:
-  { machine: Machine; catalog: PreviewCatalog; onRunning(running: boolean): void; editing: boolean }) {
+  { machine: Machine; catalog: DraftCatalog; onRunning(running: boolean): void; editing: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<MachineStage | null>(null);
   const [view, setView] = useState<{ snapshot: MachineSnapshot; running: boolean } | null>(null);
@@ -25,7 +25,7 @@ export function MachineSandbox({ machine, catalog, onRunning, editing }:
   }, [machine, catalog, retry, onRunning]);
   return <section aria-label="Machine physics sandbox">
     <h2>Test this machine</h2>
-    <p>The ball crosses the sensor to fire the Chog laser. A physical ray must hit the balloon before its pop can open the message. Move parts or change the laser aim and try again.</p>
+    <p>Run this exact arrangement, then change placement, wires or exposed controls and try again. Physical intersections and typed connections decide each outcome.</p>
     <div className="controls">
       <button disabled={editing || !view || failed || view.running || view.snapshot.tick >= MAX_TICKS} onClick={() => stage.current?.run()}>Run machine</button>
       <button disabled={!view?.running || failed} onClick={() => stage.current?.pause()}>Pause machine</button>
@@ -33,7 +33,7 @@ export function MachineSandbox({ machine, catalog, onRunning, editing }:
       {failed && <button onClick={() => { setFailed(false); setView(null); setRetry(retry + 1); }}>Retry machine engine</button>}
     </div>
     <canvas ref={canvas} className="machine-canvas" role="img" width={720} height={480}
-      aria-label="Neutral public-data preview machine stage. Physical actions and outcomes appear in the causal event list." />
+      aria-label="Neutral machine stage. Physical actions and outcomes appear in the causal event list." />
     <p role="status">{failed ? 'Machine engine unavailable. Your draft remains saved. Retry to run it.' :
       !view ? 'Loading physics engine…' : `${view.running ? 'Running' : 'Paused'} at tick ${view.snapshot.tick}/${MAX_TICKS}. ${view.snapshot.bodyCount} physical bodies. Message ${view.snapshot.bannerOpen ? 'open' : 'closed'}.`}</p>
     {view?.snapshot.tick === MAX_TICKS && <p>Run complete. Reset to play the same draft again.</p>}

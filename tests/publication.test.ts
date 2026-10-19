@@ -111,6 +111,24 @@ describe('publication API with synthetic chain and test store', () => {
     expect((await call(request('/api/versions?nonce=secret'))).status).toBe(400);
     expect((await call(request('/api/publish/extra?op=prepare', h.cookie, {}))).status).toBe(404);
   });
+
+  test('exact receipt recovery works without source gateways or RPC, never creating a new grant or publication', async () => {
+    const h = await harness(), body = await h.sign();
+    const saved = await (await h.call(body, 'commit')).json();
+    const unavailable = vi.fn(async () => { throw new Error('Gateway unavailable'); });
+    h.reader.ownerOf = async () => { throw new Error('RPC unavailable'); };
+    const retry = (value: unknown, op = 'prepare', cookie = h.cookie) => publicationResponse(request(`/api/publish?op=${op}`, cookie, value), h.auth, h.store, h.reader, unavailable, origin);
+    const prepared = await retry({ content: h.content, key: h.id });
+    expect(prepared.status).toBe(200); expect(await prepared.json()).toEqual({ published: saved });
+    expect(await (await retry(body, 'commit')).json()).toEqual(saved);
+    expect(unavailable).not.toHaveBeenCalled(); expect(h.store.commit).toHaveBeenCalledTimes(1);
+    expect((await retry({ content: h.content, key: key() })).status).toBe(400);
+    expect((await retry({ content: { ...h.content, reuseAllowed: false }, key: h.id })).status).toBe(409);
+    const stranger = h.auth.start(account().address, origin, Date.now());
+    expect((await retry({ content: h.content, key: h.id }, 'prepare', `chogmog_session=${stranger.credential}`)).status).not.toBe(200);
+    h.auth.revoke(h.credential);
+    expect((await retry(body, 'commit')).status).toBe(401);
+  });
 });
 
 test('hosted activation never uses generic secrets or unsafe origins/TLS', () => {

@@ -12,7 +12,7 @@ export interface MachineSnapshot {
   tick: number;
   bodies: { id: string; x: number; y: number; vx: number; vy: number; radius: number }[];
   events: { tick: number; text: string }[];
-  rays: { x: number; y: number; toX: number; toY: number }[];
+  rays: { tick: number; x: number; y: number; toX: number; toY: number }[];
   popped: string[];
   bannerOpen: boolean;
   bodyCount: number;
@@ -150,7 +150,7 @@ export class MachinePreview {
       });
       const hit = hits.sort((a, b) => a.timeOfImpact - b.timeOfImpact || a.collider.handle - b.collider.handle)[0];
       const distance = hit?.timeOfImpact ?? node.length;
-      this.rays.push({ x: node.x, y: node.y, toX: node.x + distance * direction.x, toY: node.y + distance * direction.y });
+      this.rays.push({ tick: this.tick, x: node.x, y: node.y, toX: node.x + distance * direction.x, toY: node.y + distance * direction.y });
       const hitBalloon = [...this.balloons].find(([, collider]) => hit?.collider.handle === collider.handle);
       if (hitBalloon) this.hitByRay.add(hitBalloon[0]);
       this.emit(node.id, 'fired', hitBalloon ? 'ray hit a balloon' : 'ray missed');
@@ -248,7 +248,10 @@ export class MachinePreview {
           (!this.gated.has(node.id) || this.allowed.get(node.id)?.has(item.id))) {
           item.cooldown = this.tick + node.cooldownTicks;
           const destination = { x: node.exitX + node.radius + item.radius, y: node.exitY };
-          if (this.world.intersectionWithShape(destination, 0, new this.R.Ball(item.radius), undefined, undefined, item.collider, item.body)) {
+          const bounds = this.machine.scene.bounds;
+          if (destination.x - item.radius < 0.05 || destination.x + item.radius > bounds.width - 0.05 ||
+              destination.y - item.radius < 0.2 || destination.y + item.radius > bounds.height - 0.05 ||
+              this.world.intersectionWithShape(destination, 0, new this.R.Ball(item.radius), undefined, undefined, item.collider, item.body)) {
             this.log(`${node.id}: portal exit blocked`); continue;
           }
           let velocity = item.body.linvel();

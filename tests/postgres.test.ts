@@ -10,8 +10,9 @@ import { account, chain, key, origin, part, request, scene } from './backendFixt
 import { authoredPart, newPartSettings } from '../src/domain/partAuthoring';
 import { getPreview } from '../src/domain/chog';
 import { previewSourcePin } from '../src/domain/documents';
-import { preparePart, publishPart, type PublicationContext } from '../src/ui/partPublication';
+import { MACHINE_ATTEMPT_KEY, prepareMachine, preparePart, publicationAttempt, publishMachine, publishPart, type MachineVersion, type PublicationContext } from '../src/ui/partPublication';
 import { publicationSource } from '../src/server/holderSource';
+import { MachineLibrary, machineCredits } from '../src/domain/machineLibrary';
 
 const connection = process.env.CHOGMOG_TEST_DATABASE_URL;
 if (process.env.CI === 'true' && !connection) throw new Error('CI must supply its isolated Postgres service');
@@ -29,7 +30,8 @@ describe.skipIf(!connection)('real Postgres integration, isolated CI database an
   test('T6 editor baseline for a non-fixture token publishes through the actual client/API/SQL path and reads back', async () => {
     const signer = account(), reader = chain(signer.address), id = key();
     const snapshot = { pin: { ...previewSourcePin('533'), nft: { ...previewSourcePin('533').nft, tokenId: '123' } }, metadata: getPreview('533').metadata };
-    const resolver = publicationSource(async () => snapshot);
+    let sourceOnline = true;
+    const resolver = publicationSource(async () => { if (!sourceOnline) throw new Error('Source gateway unavailable'); return snapshot; });
     const version = await authoredPart({ ...newPartSettings(), reuseAllowed: true }, signer.address, snapshot);
     const session = await store.start(signer.address, origin, Date.now()), cookie = `chogmog_session=${session.credential}`;
     const context: PublicationContext = {
@@ -56,6 +58,8 @@ describe.skipIf(!connection)('real Postgres integration, isolated CI database an
     reader.ownerOf = async () => account().address;
     expect(await preparePart(context, version, id)).toHaveProperty('published.id', saved.id);
     await expect(preparePart(context, version, key())).rejects.toThrow('owner');
+    sourceOnline = false;
+    expect(await preparePart(context, version, id)).toHaveProperty('published.id', saved.id);
   });
 
   async function harness() {
@@ -178,6 +182,56 @@ describe.skipIf(!connection)('real Postgres integration, isolated CI database an
     await expect(pool.query(`insert into chogmog.versions (id, kind, work_id, author, content, canonical, ownership)
       select $1, kind, work_id, author, content, canonical, ownership from chogmog.versions where id = $2`, [`sha256:${'b'.repeat(64)}`, saved.id])).rejects.toThrow();
     expect(await other.version(saved.id)).toEqual(saved);
+  });
+
+  test('T9 non-holder client signs a machine, recovers a lost SQL save response and reopens exact sources/credits through new pools', async () => {
+    const h = await harness();
+    const source = await (await h.call(h.body, 'commit')).json();
+    const creator = account(), session = await other.start(creator.address, origin, Date.now());
+    const cookie = `chogmog_session=${session.credential}`;
+    h.reader.ownerOf = async () => { throw new Error('Historical reuse never needs a current owner check'); };
+    const call = async (path: string, method?: string, body?: unknown, authenticated = true) => {
+      const req = request(path, authenticated ? cookie : undefined, body, method);
+      const replaced = new PostgresStore(otherPool);
+      const reply = path === '/api/auth' ? await authResponse(req, replaced, origin) : await publicationResponse(req, replaced, replaced, h.reader, resolvePreviewSource, origin);
+      const value = await reply.json() as Record<string, unknown>;
+      if (!reply.ok) throw new Error(String(value.error));
+      return value;
+    };
+    const lookup = (id: string, withSource?: boolean) => call(`/api/versions?id=${encodeURIComponent(id)}${withSource ? '&source=1' : ''}`, undefined, undefined, false);
+    const library = await MachineLibrary.create(lookup);
+    const machine = await library.validate(scene(source, creator.address), 'publication');
+    const version: MachineVersion = { id: machine.id, content: machine.scene, credits: machineCredits(machine) };
+    let signatures = 0;
+    const context: PublicationContext = { origin, active: () => true, api: call,
+      wallet: { request: async ({ method, params }) => {
+        if (method === 'eth_accounts') return [creator.address];
+        if (method === 'eth_chainId') return '0x8f';
+        if (method === 'personal_sign') { signatures++; return creator.signMessage({ message: String(params![0]) }); }
+        throw new Error('Forbidden wallet action');
+      } },
+    };
+    const data = new Map<string, string>();
+    const storage = { getItem: (id: string) => data.get(id) ?? null, setItem: (id: string, value: string) => { data.set(id, value); } };
+    const attempt = publicationAttempt(storage, machine.id, undefined, MACHINE_ATTEMPT_KEY);
+    const prepared = await prepareMachine(context, version, attempt.key);
+    if (!('approval' in prepared)) throw new Error('Expected approval');
+    expect(signatures).toBe(0);
+    context.api = async (...args) => { const value = await call(...args); if (args[0].includes('op=commit')) throw new Error('Lost SQL response'); return value; };
+    await expect(publishMachine(context, version, prepared.approval)).rejects.toThrow('Lost SQL response');
+    context.api = call;
+    const restoredKey = publicationAttempt(storage, machine.id, undefined, MACHINE_ATTEMPT_KEY);
+    const recovered = await prepareMachine(context, version, restoredKey.key);
+    expect(recovered).toHaveProperty('published.id', machine.id); expect(signatures).toBe(1);
+    expect(restoredKey.key).toBe(attempt.key);
+    const fresh = await MachineLibrary.create(lookup), reopened = await fresh.reopen(machine.id);
+    expect(reopened.machine.scene).toEqual(machine.scene);
+    expect(reopened.credits).toEqual([{ versionId: source.id, author: h.content.author }]);
+    expect(reopened.machine.expanded[0].version.content).toEqual(source.content);
+    const copies = await pool.query('select count(*)::int n from chogmog.credits where machine_version = $1', [machine.id]);
+    expect(copies.rows[0].n).toBe(1);
+    expect((await new PostgresStore(pool).version(machine.id))?.credits).toEqual(reopened.credits);
+    expect(Object.keys(JSON.parse(data.get(MACHINE_ATTEMPT_KEY)!))).toEqual(['id', 'key']);
   });
 
   test('anonymous/authenticated database roles cannot read private state or mutate publications', async () => {

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, injected } from './walletClient';
 import { PartAuthor } from './PartAuthor';
+import type { ReactNode } from 'react';
 
-export function WalletPanel() {
+export function WalletPanel({ ownerTools = true, children }: { ownerTools?: boolean; children?: (address: string | null) => ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState('846');
   const [observation, setObservation] = useState<string | null>(null);
@@ -86,11 +87,12 @@ export function WalletPanel() {
         setStatus('Signed out.');
       }).catch(() => setStatus('Sign-out failed. Retry sign-in to revoke the previous session.')).finally(() => setBusy(false)); }}>Sign out</button>
     </div>
-    <label>Genesis token ID
+    {ownerTools && <><label>Genesis token ID
       <input type="text" inputMode="numeric" maxLength={78} disabled={busy} value={selectedToken} onChange={(event) => { setSelectedToken(event.target.value); setObservation(null); }} />
     </label>
     <button disabled={busy || !address || !/^(0|[1-9][0-9]*)$/.test(selectedToken)} onClick={() => void checkOwnership()}>Check current ownership</button>
     {observation && <p role="status">{observation}</p>}
-    <PartAuthor key={address ?? 'signed-out'} address={address} />
+    <PartAuthor key={address ?? 'signed-out'} address={address} /></>}
+    {children?.(address)}
   </section>;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { PreviewCatalog, newMachineDraft } from '../src/domain/machineDraft';
-import { resolvePreviewSource, type Scene } from '../src/domain/documents';
+import { createPartVersion, resolvePreviewSource, type Scene } from '../src/domain/documents';
 import { MachinePreview } from '../src/game/machinePreview';
 
 async function play(scene: Scene, catalog: PreviewCatalog, ticks = 180) {
@@ -100,6 +100,39 @@ describe('free machine shared-world sandbox', () => {
       expect(released.bannerOpen).toBe(true);
       expect(released.events.filter((event) => event.text.includes('lever activated'))).toHaveLength(1);
       expect(released.events.length).toBeLessThanOrEqual(200);
+    } finally { simulation.dispose(); }
+  });
+
+  test('timestamps late laser rays relative to firing, not the absolute scene start', async () => {
+    const catalog = await PreviewCatalog.create(), scene = structuredClone(newMachineDraft(catalog));
+    scene.connections = []; scene.inputs = [{ id: 'late', tick: 100, target: { objectId: 'laser', socket: 'in' } }];
+    const simulation = await MachinePreview.create(scene, catalog.resolvePart, resolvePreviewSource);
+    try {
+      expect(simulation.step(100).rays).toEqual([]);
+      const fired = simulation.step(1);
+      expect(fired.rays).toHaveLength(1); expect(fired.rays[0].tick).toBe(100);
+      expect(fired.tick - fired.rays[0].tick).toBeLessThan(50);
+      const expired = simulation.step(50);
+      expect(expired.tick - expired.rays[0].tick).toBeGreaterThanOrEqual(50);
+      simulation.reset(); expect(simulation.snapshot().rays).toEqual([]);
+    } finally { simulation.dispose(); }
+  });
+
+  test('treats portal destinations beyond the enclosing walls as blocked for each body radius', async () => {
+    const catalog = await PreviewCatalog.create(), content = structuredClone(catalog.get('portal').content);
+    content.bounds.width = 12;
+    const portal = content.actions[0];
+    if (portal.type !== 'portal') throw new Error('Expected portal');
+    portal.x = 1; portal.exitX = 11.6; portal.radius = 0.4;
+    const version = await createPartVersion(content, resolvePreviewSource);
+    const scene = structuredClone(newMachineDraft(catalog));
+    scene.parts.push({ id: 'portal', versionId: version.id, x: 0, y: 3.8, values: {} });
+    const simulation = await MachinePreview.create(scene, async (id) => id === version.id ? { version, origin: 'public-data-preview' } : catalog.resolvePart(id), resolvePreviewSource);
+    try {
+      const snapshot = simulation.step(100);
+      expect(snapshot.events.some((e) => e.text.includes('portal exit blocked'))).toBe(true);
+      expect(snapshot.events.some((e) => e.text.includes('Wizard portal moved'))).toBe(false);
+      expect(snapshot.bodies.every((body) => body.x + body.radius < 12)).toBe(true);
     } finally { simulation.dispose(); }
   });
 });

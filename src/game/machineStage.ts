@@ -1,7 +1,6 @@
 import type { Scene } from '../domain/documents';
-import { resolvePreviewSource } from '../domain/documents';
 import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from '../domain/fallingScene';
-import type { PreviewCatalog } from '../domain/machineDraft';
+import type { DraftCatalog } from '../domain/machineDraft';
 import { FixedStepClock } from './fixedStepClock';
 import { MachinePreview, type MachineSnapshot } from './machinePreview';
 
@@ -9,9 +8,9 @@ export interface MachineStage {
   run(): void; pause(): void; reset(): void; dispose(): void;
 }
 
-export async function createMachineStage(canvas: HTMLCanvasElement, scene: Scene, catalog: PreviewCatalog, signal: AbortSignal,
+export async function createMachineStage(canvas: HTMLCanvasElement, scene: Scene, catalog: DraftCatalog, signal: AbortSignal,
   notify: (snapshot: MachineSnapshot, running: boolean) => void): Promise<MachineStage> {
-  const simulation = await MachinePreview.create(scene, catalog.resolvePart, resolvePreviewSource);
+  const simulation = await MachinePreview.create(scene, catalog.resolvePart, catalog.resolveSource);
   if (signal.aborted) { simulation.dispose(); throw new DOMException('Cancelled', 'AbortError'); }
   const ctx = canvas.getContext('2d');
   if (!ctx) { simulation.dispose(); throw new Error('Canvas unavailable'); }
@@ -52,7 +51,7 @@ export async function createMachineStage(canvas: HTMLCanvasElement, scene: Scene
       }
     }
     ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
-    if (snapshot.tick < 50) for (const ray of snapshot.rays) {
+    for (const ray of snapshot.rays.filter((ray) => snapshot.tick - ray.tick < 50)) {
       ctx.beginPath(); ctx.moveTo(ray.x * scale, y(ray.y)); ctx.lineTo(ray.toX * scale, y(ray.toY)); ctx.stroke();
     }
     for (const body of snapshot.bodies) circle(body.x, body.y, body.radius, '#222');

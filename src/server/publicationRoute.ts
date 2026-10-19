@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { recoverMessageAddress } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
-import { MAX_DOCUMENT_BYTES } from '../domain/canonical.ts';
-import { createPartVersion, validateMachine, type SourceResolver } from '../domain/documents.ts';
+import { MAX_DOCUMENT_BYTES, canonicalJson } from '../domain/canonical.ts';
+import { createPartVersion, parsePart, parseScene, validateMachine, type SourceResolver } from '../domain/documents.ts';
 import { freshOwnership, OwnershipError, type OwnershipReader } from '../chain/genesisOwnership.ts';
 import { AuthError, digest, errorResponse, jsonResponse, readSession, sessionCookie, type AuthStore } from './walletAuth.ts';
 import type { PublicationStore, PublishedVersion, PublishGrant } from './publicationStore.ts';
@@ -35,9 +35,14 @@ export async function publicationResponse(request: Request, auth: AuthStore, sto
         (request.headers.has('origin') && request.headers.get('origin') !== origin)) throw new AuthError(403, 'Origin denied');
     if (url.pathname === '/api/versions') {
       if (request.method !== 'GET') throw new AuthError(405, 'Method not allowed');
-      if (url.searchParams.size !== 1 || !/^sha256:[a-f0-9]{64}$/.test(url.searchParams.get('id') ?? '')) throw new AuthError(400, 'Expected exact version ID');
+      const withSource = url.searchParams.size === 2 && url.searchParams.get('source') === '1';
+      if ((!withSource && url.searchParams.size !== 1) || !/^sha256:[a-f0-9]{64}$/.test(url.searchParams.get('id') ?? '')) throw new AuthError(400, 'Expected exact version ID');
       const version = await store.version(url.searchParams.get('id')!);
       if (!version) throw new AuthError(404, 'Version not found');
+      if (withSource) {
+        if (version.content.kind !== 'part' || !version.ownership?.isOwner) throw new AuthError(403, 'Holder-published part required');
+        return jsonResponse({ version, source: await resolveSource(version.content.source) });
+      }
       return jsonResponse(version);
     }
     if (url.pathname !== '/api/publish' || url.searchParams.size !== 1 || !['prepare', 'commit'].includes(url.searchParams.get('op') ?? '')) throw new AuthError(404, 'Unknown publication route');
@@ -49,6 +54,22 @@ export async function publicationResponse(request: Request, auth: AuthStore, sto
     const keys = commit ? ['content', 'key', 'nonce', 'signature'] : ['content', 'key'];
     if (Object.keys(body).length !== keys.length || keys.some((k) => !Object.hasOwn(body, k)) ||
         typeof body.key !== 'string' || !/^[a-zA-Z0-9_-]{16,64}$/.test(body.key)) throw new AuthError(400, 'Invalid publication fields');
+    const commitNonce = typeof body.nonce === 'string' ? body.nonce : '';
+    if (commit && (!/^[a-f0-9]{32}$/.test(commitNonce) || typeof body.signature !== 'string' ||
+        !/^0x[a-fA-F0-9]{130}$/.test(body.signature))) throw new AuthError(400, 'Invalid publication authorization');
+    const prior = await store.receipt(session.address, body.key);
+    if (prior) {
+      let retried;
+      try {
+        const parsed = prior.content.kind === 'part' ? parsePart(body.content) : parseScene(body.content);
+        retried = { ...parsed, connections: [...parsed.connections].sort((a, b) => {
+          const x = canonicalJson(a), y = canonicalJson(b); return x < y ? -1 : x > y ? 1 : 0;
+        }) };
+      } catch { throw new AuthError(400, 'Invalid publication content'); }
+      if (canonicalJson(retried) !== canonicalJson(prior.content)) throw new AuthError(409, 'Idempotency key already used for different content');
+      if (!await readSession(request, auth)) throw new AuthError(401, 'Sign-in required');
+      return jsonResponse(commit ? prior : { published: prior });
+    }
     let version: Omit<PublishedVersion, 'publishedAt'>;
     try {
       const kind = (body.content as { kind?: string } | null)?.kind;
@@ -72,15 +93,10 @@ export async function publicationResponse(request: Request, auth: AuthStore, sto
       throw new AuthError(400, 'Invalid publication content or source');
     }
     if (version.content.author !== session.address.toLowerCase()) throw new AuthError(403, 'Author must match signed-in wallet');
-    const prior = await store.receipt(session.address, body.key);
-    if (prior && prior.id !== version.id) throw new AuthError(409, 'Idempotency key already used for different content');
     const workId = version.content.kind === 'part' ? version.content.partId : version.content.machineId;
     const sessionHash = digest(sessionCookie(request)!);
     if (commit) {
-      if (typeof body.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(body.nonce) || typeof body.signature !== 'string' ||
-          !/^0x[a-fA-F0-9]{130}$/.test(body.signature)) throw new AuthError(400, 'Invalid publication authorization');
-      if (prior) return jsonResponse(prior);
-      const grant = await store.grant(body.nonce);
+      const grant = await store.grant(commitNonce);
       if (!grant || grant.sessionHash !== sessionHash || grant.origin !== origin || grant.address !== session.address || grant.kind !== version.content.kind ||
           grant.versionId !== version.id || grant.workId !== workId || grant.key !== body.key || grant.expiresAt <= Date.now()) throw new AuthError(401, 'Publication authorization denied');
       let signer: string;
@@ -92,9 +108,8 @@ export async function publicationResponse(request: Request, auth: AuthStore, sto
         version.ownership = await freshOwnership(reader, session.address, source.nft.tokenId, Date.now(), source);
         if (!version.ownership.isOwner) throw new AuthError(403, 'Current Genesis owner required');
       }
-      return jsonResponse(await store.commit(body.nonce, grant, version));
+      return jsonResponse(await store.commit(commitNonce, grant, version));
     }
-    if (prior) return jsonResponse({ published: prior });
     if (version.content.kind === 'part') {
       const source = version.content.source;
       if (!(await freshOwnership(reader, session.address, source.nft.tokenId, Date.now(), source)).isOwner) throw new AuthError(403, 'Current Genesis owner required');

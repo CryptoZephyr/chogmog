@@ -8,6 +8,11 @@ export const MACHINE_DRAFT_KEY = 'chogmog.machine-draft.v1';
 export const PREVIEW_ACTIONS = ['release', 'laser', 'push', 'lift', 'portal'] as const;
 export type PreviewAction = typeof PREVIEW_ACTIONS[number];
 export type Machine = Awaited<ReturnType<typeof validateMachine>>;
+export interface DraftCatalog {
+  resolvePart: PartResolver;
+  resolveSource: typeof resolvePreviewSource;
+  validate(scene: Scene, purpose?: 'draft' | 'publication'): Promise<Machine>;
+}
 
 const previewAuthor = '0x0000000000000000000000000000000000000001';
 
@@ -44,6 +49,7 @@ function previewContent(kind: PreviewAction): PartContent {
 }
 
 export class PreviewCatalog {
+  readonly resolveSource = resolvePreviewSource;
   private constructor(readonly entries: ReadonlyMap<PreviewAction, PartVersion>) {}
   static async create(): Promise<PreviewCatalog> {
     const entries = await Promise.all(PREVIEW_ACTIONS.map(async (kind) =>
@@ -56,11 +62,11 @@ export class PreviewCatalog {
     if (!version) throw new Error('Only pinned public preview parts are available locally');
     return { version, origin: 'public-data-preview' };
   };
-  validate(scene: Scene): Promise<Machine> { return validateMachine(scene, this.resolvePart, resolvePreviewSource); }
+  validate(scene: Scene, purpose: 'draft' | 'publication' = 'draft'): Promise<Machine> { return validateMachine(scene, this.resolvePart, this.resolveSource, purpose); }
   source(kind: PreviewAction) { return getPreview(this.get(kind).content.source.nft.tokenId); }
 }
 
-export function newMachineDraft(catalog: PreviewCatalog): Scene {
+export function newMachineDraft(catalog: Pick<PreviewCatalog, 'get'>): Scene {
   const release = catalog.get('release'), laser = catalog.get('laser');
   return parseScene({
     kind: 'machine', schemaVersion: 1, engineVersion: ENGINE_VERSION, rulesVersion: TRAIT_RULES_VERSION,
@@ -84,21 +90,23 @@ export function newMachineDraft(catalog: PreviewCatalog): Scene {
   });
 }
 
-export async function loadMachineDraft(storage: Pick<Storage, 'getItem'>, catalog: PreviewCatalog): Promise<{ machine: Machine; recovered: boolean }> {
+export async function loadMachineDraft(storage: Pick<Storage, 'getItem'>, catalog: DraftCatalog & Pick<PreviewCatalog, 'get'>,
+  fallback?: () => Scene, key = MACHINE_DRAFT_KEY): Promise<{ machine: Machine; recovered: boolean }> {
+  const fresh = fallback ?? (() => newMachineDraft(catalog));
   try {
-    const raw = storage.getItem(MACHINE_DRAFT_KEY);
+    const raw = storage.getItem(key);
     if (raw && raw.length > MAX_DOCUMENT_BYTES) throw new Error('Draft byte limit');
     if (raw) return { machine: await catalog.validate(parseScene(JSON.parse(raw))), recovered: true };
-    return { machine: await catalog.validate(newMachineDraft(catalog)), recovered: true };
+    return { machine: await catalog.validate(fresh()), recovered: true };
   } catch {
-    return { machine: await catalog.validate(newMachineDraft(catalog)), recovered: false };
+    return { machine: await catalog.validate(fresh()), recovered: false };
   }
 }
 
-export async function saveMachineDraft(storage: Pick<Storage, 'setItem'>, catalog: PreviewCatalog, scene: Scene): Promise<boolean> {
+export async function saveMachineDraft(storage: Pick<Storage, 'setItem'>, catalog: DraftCatalog, scene: Scene, key = MACHINE_DRAFT_KEY): Promise<boolean> {
   try {
     const { scene: valid } = await catalog.validate(scene);
-    storage.setItem(MACHINE_DRAFT_KEY, JSON.stringify(valid));
+    storage.setItem(key, JSON.stringify(valid));
     return true;
   } catch { return false; }
 }

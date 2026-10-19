@@ -235,7 +235,7 @@ function controlBounds(object: Prop | Action, field: string): [number, number] {
   if (object.type === 'lift' && field === 'maxSpeed') return [0, 8];
   throw new Error('Field cannot be exposed');
 }
-function parsePart(value: unknown): PartContent {
+export function parsePart(value: unknown): PartContent {
   canonicalJson(value);
   const p = record(value, ['kind', 'schemaVersion', 'engineVersion', 'rulesVersion', 'partId', 'author', 'source', 'reuseAllowed', 'bounds', 'props', 'actions', 'sockets', 'controls', 'connections']);
   if (p.kind !== 'part' || typeof p.reuseAllowed !== 'boolean') throw new Error('Invalid part');

@@ -8,6 +8,6 @@ import './ui/debug.css';
 const harness = new URLSearchParams(location.search).get('harness');
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {harness === 'falling' ? <DebugCanvas /> : harness === 'machine' ? <MachineComposer /> : <ChainCanvas />}
+    {harness === 'falling' ? <DebugCanvas /> : harness === 'machine' || harness === 'published' ? <MachineComposer publishedMode={harness === 'published'} /> : <ChainCanvas />}
   </StrictMode>,
 );

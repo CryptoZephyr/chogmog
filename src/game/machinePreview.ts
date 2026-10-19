@@ -139,8 +139,16 @@ export class MachinePreview {
     } else if (node.type === 'laser' && to.socket === 'trigger' && !this.fired.has(node.id)) {
       this.fired.add(node.id);
       const direction = { x: Math.cos(node.angle), y: Math.sin(node.angle) };
-      const hit = this.world.castRay(new this.R.Ray(node, direction), node.length, true,
-        undefined, undefined, undefined, undefined, (collider) => ![...this.triggers.values()].some((trigger) => trigger.handle === collider.handle));
+      const ray = new this.R.Ray(node, direction);
+      const hits: { collider: Collider; timeOfImpact: number }[] = [];
+      // Shape queries also work before the world's first physics step.
+      this.world.propagateModifiedBodyPositionsToColliders();
+      this.world.forEachCollider((collider) => {
+        if ([...this.triggers.values()].some((trigger) => trigger.handle === collider.handle)) return;
+        const timeOfImpact = collider.castRay(ray, node.length, true);
+        if (timeOfImpact >= 0) hits.push({ collider, timeOfImpact });
+      });
+      const hit = hits.sort((a, b) => a.timeOfImpact - b.timeOfImpact || a.collider.handle - b.collider.handle)[0];
       const distance = hit?.timeOfImpact ?? node.length;
       this.rays.push({ x: node.x, y: node.y, toX: node.x + distance * direction.x, toY: node.y + distance * direction.y });
       const hitBalloon = [...this.balloons].find(([, collider]) => hit?.collider.handle === collider.handle);

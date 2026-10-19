@@ -33,6 +33,9 @@ describe('free machine shared-world sandbox', () => {
   test('disconnected event wire, moved sensor and exposed aim miss break the chain', async () => {
     const catalog = await PreviewCatalog.create();
     const base = newMachineDraft(catalog);
+    const immediate = structuredClone(base);
+    immediate.inputs.push({ id: 'immediate-laser', tick: 0, target: { objectId: 'laser', socket: 'in' } });
+    expect((await play(immediate, catalog, 1)).popped).toEqual(['laser/balloon']);
     const disconnected = structuredClone(base);
     disconnected.connections = disconnected.connections.filter((c) => c.from.objectId !== 'sensor');
     const noWire = await play(disconnected, catalog);

@@ -92,6 +92,7 @@ export function ChainCanvas() {
       <ol>{view?.snapshot.events.map((event, index) => <li key={index}>Tick {event.tick}: {event.actor} → {event.type} → {event.target}{event.sourceToken ? ` (source token ${event.sourceToken})` : ''}</li>)}</ol>
     </details>
     <p><a href="?harness=falling">Open the original T0 falling-body harness</a></p>
+    <p><a href="?harness=machine">Build a free machine from labelled public-preview parts</a></p>
     <WalletPanel />
   </main>;
 }

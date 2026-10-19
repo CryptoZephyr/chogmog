@@ -17,4 +17,5 @@ input[type="range"] { display: block; width: min(100%, 24rem); }
 .canvas-host canvas { display: block; width: 100% !important; height: auto !important; }
 .part-canvas { display: block; width: min(100%, 540px); height: auto; border: 1px solid #999; }
 pre.breakable { white-space: pre-wrap; }
+.machine-canvas { display: block; width: min(100%, 720px); height: auto; border: 1px solid #999; }
 output { display: block; margin-top: 0.75rem; font-family: monospace; }

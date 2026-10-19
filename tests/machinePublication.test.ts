@@ -148,7 +148,7 @@ describe('T9 non-holder machine publication, actual client/API with explicit syn
     const h = await harness();
     await expect(h.library.loadPart('https://outside.test')).rejects.toThrow('exact');
     const preview = h.library.get('laser');
-    await expect(h.library.loadPart(preview.id)).rejects.toThrow('not found');
+    await expect(h.library.loadPart(preview.id)).rejects.toThrow('Preview parts');
     const response = await h.lookup(h.source.id, true);
     const modified = structuredClone(response) as { version: PublishedVersion; source: { pin: unknown } };
     modified.version.content.author = h.creator.address.toLowerCase();
@@ -201,5 +201,31 @@ describe('T9 non-holder machine publication, actual client/API with explicit syn
     await expect(recovered.loadPart(h.source.id)).rejects.toThrow('503');
     available = true;
     expect(await recovered.loadPart(h.source.id)).toEqual(h.source);
+  });
+
+  test('published-only loading, resolution, edits and draft recovery never admit public previews', async () => {
+    const h = await harness(), published = await MachineLibrary.create(h.lookup);
+    await saveMachineDraft(h.storage, published, h.machine.scene, PUBLISHED_DRAFT_KEY);
+    const saved = h.data.get(PUBLISHED_DRAFT_KEY);
+    h.lookup.mockClear();
+    for (const preview of published.previews.entries.values()) {
+      await expect(published.loadPart(preview.id)).rejects.toThrow(/Preview parts/);
+      await expect(published.resolvePart(preview.id)).rejects.toThrow(/Holder-published/);
+      const changed = structuredClone(h.machine.scene);
+      changed.parts.push({ id: 'preview', versionId: preview.id, x: 0, y: 0, values: {} });
+      await expect(published.validate(changed)).rejects.toThrow(/Preview parts/);
+      expect(await saveMachineDraft(h.storage, published, changed, PUBLISHED_DRAFT_KEY)).toBe(false);
+      expect(h.data.get(PUBLISHED_DRAFT_KEY)).toBe(saved);
+    }
+    expect(h.lookup).not.toHaveBeenCalled();
+    const contaminated = JSON.stringify(newMachineDraft(published));
+    h.data.set(PUBLISHED_DRAFT_KEY, contaminated);
+    const recovered = await loadMachineDraft(h.storage, published, () => published.newPublishedDraft(), PUBLISHED_DRAFT_KEY);
+    expect(recovered.recovered).toBe(false); expect(recovered.machine.scene.parts).toEqual([]);
+    expect(h.data.get(PUBLISHED_DRAFT_KEY)).toBe(contaminated);
+    const previews = await MachineLibrary.create(h.lookup, 'preview');
+    expect((await previews.validate(newMachineDraft(previews))).scene.parts).toHaveLength(2);
+    expect((await previews.resolvePart(previews.get('laser').id)).origin).toBe('public-data-preview');
+    await expect(previews.validate(newMachineDraft(previews), 'publication')).rejects.toThrow(/Preview parts/);
   });
 });

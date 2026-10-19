@@ -65,7 +65,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
   useEffect(() => {
     let active = true;
     mounted.current = true;
-    void MachineLibrary.create((id, source) => api(`/api/versions?id=${encodeURIComponent(id)}${source ? '&source=1' : ''}`))
+    void MachineLibrary.create((id, source) => api(`/api/versions?id=${encodeURIComponent(id)}${source ? '&source=1' : ''}`), publishedMode ? 'published' : 'preview')
       .then(async (library) => {
         const id = publishedMode ? new URLSearchParams(location.search).get('version') : null;
         if (id) {

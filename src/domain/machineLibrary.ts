@@ -18,18 +18,24 @@ export class MachineLibrary {
   private parts = new Map<string, PartVersion>();
   private sources = new Map<string, Awaited<ReturnType<SourceResolver>>>();
   private pending = new Map<string, Promise<PartVersion>>();
-  private constructor(readonly previews: PreviewCatalog, private lookup: VersionLookup) {}
-  static async create(lookup: VersionLookup) { return new MachineLibrary(await PreviewCatalog.create(), lookup); }
+  private constructor(readonly previews: PreviewCatalog, private lookup: VersionLookup, private mode: 'published' | 'preview') {}
+  static async create(lookup: VersionLookup, mode: 'published' | 'preview' = 'published') {
+    return new MachineLibrary(await PreviewCatalog.create(), lookup, mode);
+  }
   get(kind: PreviewAction) { return this.previews.get(kind); }
   isPublished(id: string) { return this.parts.has(id); }
   get published(): readonly PartVersion[] { return [...this.parts.values()]; }
   readonly resolveSource: SourceResolver = async (pin) => this.sources.get(canonicalJson(pin)) ?? resolvePreviewSource(pin);
   readonly resolvePart: PartResolver = async (id) => {
     const version = this.parts.get(id);
-    return version ? { version, origin: 'holder-published' } : this.previews.resolvePart(id);
+    if (version) return { version, origin: 'holder-published' };
+    if (this.mode === 'preview') return this.previews.resolvePart(id);
+    throw new Error('Holder-published part required.');
   };
+  private isPreview(id: string) { return [...this.previews.entries.values()].some((part) => part.id === id); }
   loadPart(id: string): Promise<PartVersion> {
     if (!versionId(id)) return Promise.reject(new Error('Enter an exact sha256 version ID.'));
+    if (this.isPreview(id)) return Promise.reject(new Error('Preview parts are not holder-published versions.'));
     const saved = this.parts.get(id);
     if (saved) return Promise.resolve(saved);
     const pending = this.pending.get(id);
@@ -60,7 +66,7 @@ export class MachineLibrary {
   async validate(scene: Scene, purpose: 'draft' | 'publication' = 'draft') {
     const parsed = parseScene(scene);
     for (const id of new Set(parsed.parts.map((part) => part.versionId))) {
-      if (![...this.previews.entries.values()].some((part) => part.id === id)) await this.loadPart(id);
+      if (this.mode === 'published' || !this.isPreview(id)) await this.loadPart(id);
     }
     return validateMachine(parsed, this.resolvePart, this.resolveSource, purpose);
   }

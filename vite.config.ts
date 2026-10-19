@@ -5,6 +5,7 @@ import { sourceResponse } from './src/server/sourceCache.ts';
 import { authResponse, errorResponse, jsonResponse, MemoryAuthStore } from './src/server/walletAuth.ts';
 import { genesisReader } from './src/chain/genesisOwnership.ts';
 import { ownerResponse } from './src/server/ownershipRoute.ts';
+import { holderSourceResponse } from './src/server/holderSource.ts';
 
 function previewSources(): Plugin {
   const store = new MemoryAuthStore();
@@ -21,7 +22,7 @@ function previewSources(): Plugin {
           res.end(Buffer.from(await response.arrayBuffer()));
         }).catch(next);
     });
-    for (const path of ['/api/auth', '/api/owner', '/api/publish', '/api/versions']) server.middlewares.use(path, (req, res) => {
+    for (const path of ['/api/auth', '/api/owner', '/api/holder-source', '/api/publish', '/api/versions']) server.middlewares.use(path, (req, res) => {
       const host = req.headers.host;
       let response: Promise<Response>;
       try {
@@ -33,6 +34,7 @@ function previewSources(): Plugin {
         const request = new Request(url, { method: req.method, headers,
           ...(req.method === 'POST' ? { body: req as unknown as ReadableStream<Uint8Array>, duplex: 'half' } : {}) } as RequestInit & { duplex?: 'half' });
         response = path === '/api/auth' ? authResponse(request, store, origin.origin) : path === '/api/owner' ? ownerResponse(request, store, genesisReader, origin.origin)
+          : path === '/api/holder-source' ? holderSourceResponse(request, store, genesisReader, origin.origin)
           : Promise.resolve(jsonResponse({ error: 'Publication requires the shared backend' }, 503));
       } catch { response = Promise.resolve(jsonResponse({ error: 'Local auth unavailable' }, 503)); }
       void response.then(async (reply) => { res.writeHead(reply.status, Object.fromEntries(reply.headers)); res.end(Buffer.from(await reply.arrayBuffer())); })

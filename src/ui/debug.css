@@ -15,4 +15,6 @@ label { display: block; margin-bottom: 0.75rem; }
 input[type="range"] { display: block; width: min(100%, 24rem); }
 .canvas-host { width: 100%; aspect-ratio: 3 / 2; border: 1px solid #999; box-sizing: border-box; }
 .canvas-host canvas { display: block; width: 100% !important; height: auto !important; }
+.part-canvas { display: block; width: min(100%, 540px); height: auto; border: 1px solid #999; }
+pre.breakable { white-space: pre-wrap; }
 output { display: block; margin-top: 0.75rem; font-family: monospace; }

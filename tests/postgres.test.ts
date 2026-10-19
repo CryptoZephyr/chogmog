@@ -7,6 +7,11 @@ import { authResponse, digest } from '../src/server/walletAuth';
 import { publicationResponse } from '../src/server/publicationRoute';
 import { resolvePreviewSource } from '../src/domain/documents';
 import { account, chain, key, origin, part, request, scene } from './backendFixtures';
+import { authoredPart, newPartSettings } from '../src/domain/partAuthoring';
+import { getPreview } from '../src/domain/chog';
+import { previewSourcePin } from '../src/domain/documents';
+import { preparePart, publishPart, type PublicationContext } from '../src/ui/partPublication';
+import { publicationSource } from '../src/server/holderSource';
 
 const connection = process.env.CHOGMOG_TEST_DATABASE_URL;
 if (process.env.CI === 'true' && !connection) throw new Error('CI must supply its isolated Postgres service');
@@ -20,6 +25,38 @@ describe.skipIf(!connection)('real Postgres integration, isolated CI database an
     await migrate(pool); await migrate(otherPool);
   });
   afterAll(async () => { await Promise.all([pool?.end(), otherPool?.end()]); });
+
+  test('T6 editor baseline for a non-fixture token publishes through the actual client/API/SQL path and reads back', async () => {
+    const signer = account(), reader = chain(signer.address), id = key();
+    const snapshot = { pin: { ...previewSourcePin('533'), nft: { ...previewSourcePin('533').nft, tokenId: '123' } }, metadata: getPreview('533').metadata };
+    const resolver = publicationSource(async () => snapshot);
+    const version = await authoredPart({ ...newPartSettings(), reuseAllowed: true }, signer.address, snapshot);
+    const session = await store.start(signer.address, origin, Date.now()), cookie = `chogmog_session=${session.credential}`;
+    const context: PublicationContext = {
+      origin, active: () => true,
+      wallet: { request: async ({ method, params }) => {
+        if (method === 'eth_accounts') return [signer.address];
+        if (method === 'eth_chainId') return '0x8f';
+        if (method === 'personal_sign') return signer.signMessage({ message: String(params![0]) });
+        throw new Error('Unexpected wallet method');
+      } },
+      api: async (path, method, body) => {
+        const req = request(path, cookie, body, method);
+        const reply = path === '/api/auth' ? await authResponse(req, other, origin) : await publicationResponse(req, other, other, reader, resolver, origin);
+        const result = await reply.json() as Record<string, unknown>;
+        if (!reply.ok) throw new Error(String(result.error));
+        return result;
+      },
+    };
+    const prepared = await preparePart(context, version, id);
+    if (!('approval' in prepared)) throw new Error('Expected scoped approval');
+    const saved = await publishPart(context, version, prepared.approval);
+    expect(saved.id).toBe(version.id);
+    expect((await store.version(saved.id))?.content).toEqual(version.content);
+    reader.ownerOf = async () => account().address;
+    expect(await preparePart(context, version, id)).toHaveProperty('published.id', saved.id);
+    await expect(preparePart(context, version, key())).rejects.toThrow('owner');
+  });
 
   async function harness() {
     const signer = account(), reader = chain(signer.address), content = part(signer.address), id = key();

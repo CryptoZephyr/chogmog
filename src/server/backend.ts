@@ -3,7 +3,7 @@ import { PostgresStore } from './postgresStore.ts';
 import { authResponse, errorResponse } from './walletAuth.ts';
 import { ownerResponse } from './ownershipRoute.ts';
 import { publicationResponse } from './publicationRoute.ts';
-import { resolvePreviewSource } from '../domain/documents.ts';
+import { holderSourceResponse, publicationSource } from './holderSource.ts';
 import { genesisReader } from '../chain/genesisOwnership.ts';
 
 let backend: { origin: string; store: PostgresStore } | undefined;
@@ -30,6 +30,7 @@ export async function deployedResponse(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path === '/api/auth') return await authResponse(request, backend.store, backend.origin);
     if (path === '/api/owner') return await ownerResponse(request, backend.store, genesisReader, backend.origin);
-    return await publicationResponse(request, backend.store, backend.store, genesisReader, resolvePreviewSource, backend.origin);
+    if (path === '/api/holder-source') return await holderSourceResponse(request, backend.store, genesisReader, backend.origin);
+    return await publicationResponse(request, backend.store, backend.store, genesisReader, publicationSource(), backend.origin);
   } catch (error) { return errorResponse(error); }
 }

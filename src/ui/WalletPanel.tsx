@@ -1,21 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-
-interface InjectedWallet {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-  on?(event: string, listener: () => void): void;
-  removeListener?(event: string, listener: () => void): void;
-}
-const injected = () => (window as Window & { ethereum?: InjectedWallet }).ethereum;
-
-async function api(path: string, method = 'GET', value?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(path, { method, credentials: 'same-origin',
-    ...(value === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }) });
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object') throw new Error('Invalid server response');
-  const data = result as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Request failed');
-  return data;
-}
+import { api, injected } from './walletClient';
+import { PartAuthor } from './PartAuthor';
 
 export function WalletPanel() {
   const [address, setAddress] = useState<string | null>(null);
@@ -97,14 +82,15 @@ export function WalletPanel() {
     <p role="status">{status}{address ? ` Address: ${address}` : ''}</p>
     <div className="controls">
       <button disabled={busy} onClick={() => void signIn()}>Sign in with wallet</button>
-      <button disabled={busy || !address} onClick={() => { sequence.current++; void api('/api/auth?op=logout', 'POST').then(() => {
-        setAddress(null); setObservation(null); setStatus('Signed out.');
-      }).catch(() => setStatus('Sign-out failed. Retry before leaving this device.')); }}>Sign out</button>
+      <button disabled={busy || !address} onClick={() => { sequence.current++; setBusy(true); setAddress(null); setObservation(null); void api('/api/auth?op=logout', 'POST').then(() => {
+        setStatus('Signed out.');
+      }).catch(() => setStatus('Sign-out failed. Retry sign-in to revoke the previous session.')).finally(() => setBusy(false)); }}>Sign out</button>
     </div>
     <label>Genesis token ID
       <input type="text" inputMode="numeric" maxLength={78} disabled={busy} value={selectedToken} onChange={(event) => { setSelectedToken(event.target.value); setObservation(null); }} />
     </label>
     <button disabled={busy || !address || !/^(0|[1-9][0-9]*)$/.test(selectedToken)} onClick={() => void checkOwnership()}>Check current ownership</button>
     {observation && <p role="status">{observation}</p>}
+    <PartAuthor key={address ?? 'signed-out'} address={address} />
   </section>;
 }

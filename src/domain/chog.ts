@@ -1,6 +1,6 @@
-import fireWizard from '../../fixtures/genesis/338.json';
-import laser from '../../fixtures/genesis/25.json';
-import provenance from '../../fixtures/genesis/provenance.json';
+import fireWizard from '../../fixtures/genesis/338.json' with { type: 'json' };
+import laser from '../../fixtures/genesis/25.json' with { type: 'json' };
+import provenance from '../../fixtures/genesis/provenance.json' with { type: 'json' };
 
 export type Ability = 'push' | 'release' | 'lift' | 'portal' | 'laser' | 'bounce' | 'slick' | 'spray' | 'coin' | 'shout';
 export const TRAIT_RULES_VERSION = 1;

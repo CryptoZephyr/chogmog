@@ -20,6 +20,7 @@
     "test:domain": "vitest run tests/documents.test.ts",
     "test:wallet": "vitest run tests/walletAuth.test.ts",
     "test:backend": "vitest run tests/publication.test.ts tests/postgres.test.ts",
+    "test:authoring": "vitest run tests/partAuthoring.test.ts tests/holderSource.test.ts tests/partPublication.test.ts",
     "db:migrate": "node scripts/migrate.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },

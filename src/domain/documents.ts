@@ -1,6 +1,6 @@
-import { canonicalJson, contentId, freezeDocument } from './canonical';
-import { compileKit, getPreview, parseMetadata, provenance, TRAIT_RULES_VERSION, type Metadata } from './chog';
-import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from './fallingScene';
+import { canonicalJson, contentId, freezeDocument } from './canonical.ts';
+import { compileKit, getPreview, parseMetadata, provenance, TRAIT_RULES_VERSION, type Metadata } from './chog.ts';
+import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from './fallingScene.ts';
 
 export const ENGINE_VERSION = 'rapier2d-compat@0.21.0';
 export const SCHEMA_VERSION = 1;

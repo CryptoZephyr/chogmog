@@ -3,13 +3,15 @@ import type { Address } from 'viem';
 import { canonicalJson } from '../domain/canonical.ts';
 import { AuthError, digest, newChallenge, newSession, type AuthStore, type Challenge, type Session } from './walletAuth.ts';
 import type { PublicationStore, PublishedVersion, PublishGrant } from './publicationStore.ts';
+import { DISCOVERY_PAGE_SIZE, type DiscoveryPage, type DiscoveryQuery, type WorkSummary } from '../domain/discovery.ts';
+import type { DiscoveryStore } from './discoveryRoute.ts';
 
 type Queryable = Pick<PoolClient, 'query'>;
 const live = 'expires_at > clock_timestamp()';
 const isHash = (value: string | null): value is string => !!value && /^[a-f0-9]{64}$/.test(value);
 const isNonce = (value: string) => /^[a-f0-9]{32}$/.test(value);
 
-export class PostgresStore implements AuthStore, PublicationStore {
+export class PostgresStore implements AuthStore, PublicationStore, DiscoveryStore {
   constructor(readonly pool: Pool) {}
 
   private async transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -91,6 +93,28 @@ export class PostgresStore implements AuthStore, PublicationStore {
   }
 
   version(id: string) { return this.load(this.pool, id); }
+
+  async discover({ kind, q, after }: DiscoveryQuery): Promise<DiscoveryPage> {
+    const { rows } = await this.pool.query(`
+      select v.id, v.kind, v.work_id as "workId", v.author, v.published_at,
+        case when v.kind = 'machine' then v.content->>'message'
+          else (select string_agg(distinct a->>'type', ', ' order by a->>'type') from jsonb_array_elements(v.content->'actions') a) end as description,
+        v.content->'source'->'nft'->>'tokenId' as "tokenId", v.content->>'remixOf' as "remixOf"
+      from chogmog.versions v
+      where v.kind = $1
+        and (v.kind = 'machine' or (v.ownership->>'isOwner' = 'true' and v.content->>'reuseAllowed' = 'true'))
+        and ($2 = '' or position($2 in lower(v.work_id || ' ' || v.author || ' ' ||
+          coalesce(v.content->>'message', '') || ' ' || coalesce(v.content->'source'->'nft'->>'tokenId', ''))) > 0)
+        and ($3::text is null or (v.published_at, v.id) <
+          (select published_at, id from chogmog.versions where id = $3 and kind = $1))
+      order by v.published_at desc, v.id desc limit $4`, [kind, q, after, DISCOVERY_PAGE_SIZE + 1]);
+    const items: WorkSummary[] = rows.slice(0, DISCOVERY_PAGE_SIZE).map((row) => ({
+      id: row.id, kind: row.kind, workId: row.workId, author: row.author,
+      publishedAt: row.published_at.toISOString(), description: row.description || 'Reusable part',
+      ...(kind === 'part' ? { tokenId: row.tokenId } : row.remixOf ? { remixOf: row.remixOf } : {}),
+    }));
+    return { items, next: rows.length > DISCOVERY_PAGE_SIZE ? items.at(-1)!.id : null };
+  }
 
   async receipt(address: string, key: string) {
     const { rows } = await this.pool.query('select version_id from chogmog.receipts where author = $1 and key = $2', [address.toLowerCase(), key]);

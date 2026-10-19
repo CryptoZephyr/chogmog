@@ -13,6 +13,9 @@ import { previewSourcePin } from '../src/domain/documents';
 import { MACHINE_ATTEMPT_KEY, prepareMachine, preparePart, publicationAttempt, publishMachine, publishPart, type MachineVersion, type PublicationContext } from '../src/ui/partPublication';
 import { publicationSource } from '../src/server/holderSource';
 import { MachineLibrary, machineCredits } from '../src/domain/machineLibrary';
+import { discoveryResponse } from '../src/server/discoveryRoute';
+import { discoveryUrl, parseDiscovery, type DiscoveryQuery } from '../src/domain/discovery';
+import { canonicalJson, contentId } from '../src/domain/canonical';
 
 const connection = process.env.CHOGMOG_TEST_DATABASE_URL;
 if (process.env.CI === 'true' && !connection) throw new Error('CI must supply its isolated Postgres service');
@@ -71,6 +74,87 @@ describe.skipIf(!connection)('real Postgres integration, isolated CI database an
     const body = { content, key: id, nonce: p.nonce, signature: await signer.signMessage({ message: p.message }) };
     return { signer, reader, content, id, session, cookie, call, p, body };
   }
+
+  test('T11 bounded discovery uses exact versions, stable timestamp ties, search and no private fields', async () => {
+    const h = await harness();
+    await h.call(h.body, 'commit');
+    const prefix = `browse-${key()}`;
+    const publishedAt = '2026-10-18T00:00:00.123456Z';
+    const ids: string[] = [];
+    // Isolated SQL fixtures test tied timestamps. They are not genuine holder evidence.
+    for (let i = 0; i < 15; i++) {
+      const content = { ...h.content, partId: `${prefix}-${i}`, reuseAllowed: i !== 14 };
+      const id = await contentId(content); ids.push(id);
+      await pool.query('insert into chogmog.works (kind, id, author, nft) values ($1,$2,$3,$4)',
+        ['part', content.partId, content.author, content.source.nft]);
+      await pool.query(`insert into chogmog.versions (id,kind,work_id,author,content,canonical,ownership,published_at)
+        values ($1,'part',$2,$3,$4,$5,$6,$7)`,
+      [id, content.partId, content.author, content, canonicalJson(content), { isOwner: true }, publishedAt]);
+    }
+    const query: DiscoveryQuery = { kind: 'part', q: prefix, after: null };
+    const call = async (selected: DiscoveryQuery) => {
+      const response = await discoveryResponse(request(discoveryUrl(selected)), new PostgresStore(otherPool), origin);
+      expect(response.status).toBe(200);
+      return parseDiscovery(await response.json(), selected.kind);
+    };
+    const page = await call(query);
+    expect(page.items).toHaveLength(12); expect(page.next).toBe(page.items.at(-1)!.id);
+    const next = await call({ ...query, after: page.next });
+    expect(next.items).toHaveLength(2); expect(next.next).toBeNull();
+    expect([...page.items, ...next.items].map((v) => v.id)).toEqual(ids.slice(0, 14).sort().reverse());
+    const summary = page.items[0];
+    expect(Object.keys(summary).sort()).toEqual(['author', 'description', 'id', 'kind', 'publishedAt', 'tokenId', 'workId']);
+    expect(summary.description).toBe('laser'); expect(summary.tokenId).toBe('533');
+    expect((await store.version(summary.id))?.content.kind).toBe('part');
+    expect((await call({ ...query, q: `${prefix}-14` })).items).toHaveLength(0);
+    expect((await call({ ...query, q: "'); delete from chogmog.versions; --" })).items).toHaveLength(0);
+    expect((await call({ ...query, q: '%' })).items).toHaveLength(0);
+    expect((await call({ ...query, q: '_no_wildcard_' })).items).toHaveLength(0);
+    expect((await call({ ...query, q: prefix, after: `sha256:${'f'.repeat(64)}` })).items).toHaveLength(0);
+    expect((await call({ ...query, q: `${prefix}-0` })).items.map((v) => v.id)).toEqual([ids[0]]);
+    const index = await pool.query("select indexname from pg_indexes where schemaname='chogmog' and indexname='versions_discovery'");
+    expect(index.rowCount).toBe(1);
+  });
+
+  test('T11 API publication appears in discovery and durable remix lineage survives new pools and retry', async () => {
+    const h = await harness();
+    const source = await (await h.call(h.body, 'commit')).json();
+    const creator = account(), session = await other.start(creator.address, origin, Date.now());
+    const cookie = `chogmog_session=${session.credential}`;
+    const save = async (content: unknown) => {
+      const retry = key();
+      const prepare = await publicationResponse(request('/api/publish?op=prepare', cookie, { content, key: retry }),
+        other, other, h.reader, resolvePreviewSource, origin);
+      expect(prepare.status).toBe(200);
+      const approval = await prepare.json(), body = { content, key: retry, nonce: approval.nonce, signature: await creator.signMessage({ message: approval.message }) };
+      const commit = () => publicationResponse(request('/api/publish?op=commit', cookie, body), store, store, h.reader, resolvePreviewSource, origin);
+      const response = await commit(); expect(response.status).toBe(200);
+      return { saved: await response.json(), commit };
+    };
+    const parent = await save(scene(source, creator.address));
+    const library = await MachineLibrary.create(async (id, withSource) => {
+      const response = await publicationResponse(request(`/api/versions?id=${encodeURIComponent(id)}${withSource ? '&source=1' : ''}`),
+        other, other, h.reader, resolvePreviewSource, origin);
+      return response.json();
+    });
+    const reopened = await library.reopen(parent.saved.id), content = { ...library.remix(reopened.machine), author: creator.address.toLowerCase() };
+    const child = await save(content);
+    expect(child.saved.content.remixOf).toBe(parent.saved.id);
+    h.reader.ownerOf = async () => { throw new Error('No current-owner read for discovery or historical reuse'); };
+    expect(await (await child.commit()).json()).toEqual(child.saved);
+    const response = await discoveryResponse(request(discoveryUrl({ kind: 'machine', q: content.machineId, after: null })), new PostgresStore(otherPool), origin);
+    expect(response.status).toBe(200);
+    const discovered = parseDiscovery(await response.json(), 'machine');
+    expect(discovered.items.map((item) => [item.id, item.remixOf])).toEqual([[child.saved.id, parent.saved.id]]);
+    const restored = await library.reopen(discovered.items[0].id);
+    expect(restored.machine.scene.remixOf).toBe(parent.saved.id);
+    expect(restored.credits).toEqual([{ versionId: source.id, author: source.content.author }]);
+    expect((await library.reopen(parent.saved.id)).machine.scene).toEqual(parent.saved.content);
+    const parts = await store.discover({ kind: 'part', q: h.content.partId, after: null });
+    expect(parts.items.map((item) => item.id)).toEqual([source.id]);
+    const count = await pool.query('select count(*)::int n from chogmog.versions where id = $1', [child.saved.id]);
+    expect(count.rows[0].n).toBe(1);
+  });
 
   test('one nonce is consumed atomically across independent pools and failed verification cannot replay', async () => {
     const signer = account(), now = Date.now(), c = await store.issue(signer.address, origin, now);

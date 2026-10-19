@@ -39,6 +39,7 @@ export function ChainCanvas() {
 
   return <main>
     <h1>Chogmog</h1>
+    <nav><a href="?harness=gallery">Machine gallery</a> · <a href="?harness=library">Reusable part library</a></nav>
     <p>Make mischief move.</p>
     <h2>First-chain development harness</h2>
     <p>Public-data preview, free to play with no wallet. These are authentic Genesis traits mapped to app behaviours, not holder-authored published parts. Ownership is not verified. This neutral canvas is not the final product design.</p>

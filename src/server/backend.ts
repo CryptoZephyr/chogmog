@@ -5,6 +5,7 @@ import { ownerResponse } from './ownershipRoute.ts';
 import { publicationResponse } from './publicationRoute.ts';
 import { holderSourceResponse, publicationSource } from './holderSource.ts';
 import { genesisReader } from '../chain/genesisOwnership.ts';
+import { discoveryResponse } from './discoveryRoute.ts';
 
 let backend: { origin: string; store: PostgresStore } | undefined;
 
@@ -22,7 +23,7 @@ export async function deployedResponse(request: Request): Promise<Response> {
       const pool = databasePool(config.databaseUrl);
       try {
         const { rows } = await pool.query('select version from chogmog.schema_migrations order by version');
-        if (rows.length !== 1 || rows[0].version !== '001_publication.sql') throw new Error('Database migration required');
+        if (rows.length !== 2 || rows[0].version !== '001_publication.sql' || rows[1].version !== '002_discovery.sql') throw new Error('Database migration required');
       } catch (error) { await pool.end(); throw error; }
       backend = { origin: config.origin, store: new PostgresStore(pool) };
     }
@@ -31,6 +32,7 @@ export async function deployedResponse(request: Request): Promise<Response> {
     if (path === '/api/auth') return await authResponse(request, backend.store, backend.origin);
     if (path === '/api/owner') return await ownerResponse(request, backend.store, genesisReader, backend.origin);
     if (path === '/api/holder-source') return await holderSourceResponse(request, backend.store, genesisReader, backend.origin);
+    if (path === '/api/discover') return await discoveryResponse(request, backend.store, backend.origin);
     return await publicationResponse(request, backend.store, backend.store, genesisReader, publicationSource(), backend.origin);
   } catch (error) { return errorResponse(error); }
 }

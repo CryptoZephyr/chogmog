@@ -74,6 +74,10 @@ export class MachineLibrary {
     const draft = structuredClone(newMachineDraft(this.previews));
     return parseScene({ ...draft, parts: [], connections: [], inputs: [] });
   }
+  remix(machine: Awaited<ReturnType<typeof validateMachine>>): Scene {
+    const fresh = this.newPublishedDraft();
+    return parseScene({ ...machine.scene, machineId: fresh.machineId, author: fresh.author, remixOf: machine.id });
+  }
   async reopen(id: string) {
     if (!versionId(id)) throw new Error('Enter an exact sha256 version ID.');
     const result = await this.lookup(id);

@@ -8,6 +8,7 @@ import { MachineLibrary, PUBLISHED_DRAFT_KEY } from '../domain/machineLibrary';
 import { api } from './walletClient';
 import { WalletPanel } from './WalletPanel';
 import { MachinePublication } from './MachinePublication';
+import { WorkDiscovery } from './WorkDiscovery';
 
 const storage = {
   getItem: (key: string) => window.localStorage.getItem(key),
@@ -41,7 +42,7 @@ function nextId(scene: Scene, prefix: string): string {
 
 export function MachineComposer({ publishedMode = false }: { publishedMode?: boolean }) {
   const [catalog, setCatalog] = useState<MachineLibrary | null>(null);
-  const [partId, setPartId] = useState('');
+  const [partId, setPartId] = useState(() => publishedMode ? new URLSearchParams(location.search).get('part') ?? '' : '');
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const draftKey = publishedMode ? PUBLISHED_DRAFT_KEY : MACHINE_DRAFT_KEY;
   const [machine, setMachine] = useState<Machine | null>(null);
@@ -89,8 +90,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
     const next = structuredClone(draft.current ?? machine.scene);
     try {
       if (publishedAt) {
-        const remix = catalog.newPublishedDraft();
-        next.machineId = remix.machineId; next.author = remix.author;
+        Object.assign(next, catalog.remix(machine));
       }
       change(next);
       draft.current = next;
@@ -125,7 +125,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
     <p>Make mischief move.</p>
     <h2>{publishedMode ? 'Published-part machine development harness' : 'Free machine composition development harness'}</h2>
     <p>{publishedMode ? 'Loading, composing and replaying exact published parts needs no wallet or NFT. Publication requires optional sign-in, never NFT ownership. Parts only appear after genuine holder publication. Local Vite cannot load published parts.' : 'No wallet is needed. These pinned parts come from authentic public Genesis snapshots. They are unverified previews, not holder-authored publications or a genuine part catalogue. Machine publication remains unavailable in preview mode.'} This neutral editor is not the final product design.</p>
-    <p><a href="?harness=chain">First-chain preview</a> · <a href="?harness=falling">Original physics harness</a></p>
+    <p><a href="?harness=gallery">Machine gallery</a> · <a href="?harness=library">Part library</a> · <a href="?harness=chain">First-chain preview</a> · <a href="?harness=falling">Original physics harness</a></p>
     <p><a href={publishedMode ? '?harness=machine' : '?harness=published'}>{publishedMode ? 'Open the wallet-free public-preview builder' : 'Open the published-part builder'}</a>{publishedMode && <> · <a href="?harness=published">Return to your last published-part draft</a></>}</p>
     {!machine || !catalog ? <p role="status">{error || 'Loading pinned preview parts and local draft…'}</p> : <>
       {!recovered && <p role="alert">The previous local draft or its exact sources could not be read or trusted. A fresh draft was opened without overwriting the saved one. No holder authority was restored.</p>}
@@ -133,6 +133,10 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
       {error && <p role="alert">Change rejected: {error}. Your last valid draft is kept.</p>}
       <p role="status">{busy ? 'Checking and saving the exact draft…' : saved ? 'Local draft ready' : 'Draft not saved'}. {machine.scene.parts.length} reusable parts. Composition grants no holder authority.</p>
       {publishedAt && <p className="breakable">Reopened exact published version {machine.id} from {publishedAt}. Editing starts a new machine ID for a remix and leaves the original unchanged.</p>}
+      {machine.scene.remixOf && <p className="breakable">Remix lineage: <a href={`?harness=published&version=${encodeURIComponent(machine.scene.remixOf)}`}>{machine.scene.remixOf}</a>. Original source parts and credits remain pinned.</p>}
+      {publishedAt && <button disabled={busy || running} onClick={() => {
+        if (window.confirm('Create a remix and replace your saved local published-part draft? The original publication stays unchanged.')) void edit(() => {});
+      }}>Remix as a new local draft</button>}
       <MachineSandbox key={machine.id} machine={machine} catalog={catalog} onRunning={onRunning} editing={busy} />
       <fieldset disabled={running}>
         <legend>Machine draft, edits rebuild and reset the run</legend>
@@ -150,7 +154,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
         <button onClick={() => {
           if (window.confirm('Replace this local draft with a new machine? The current draft will be overwritten.')) {
             const fresh = publishedMode ? catalog.newPublishedDraft() : newMachineDraft(catalog);
-            void edit((s) => { Object.assign(s, fresh); });
+            void edit((s) => { delete s.remixOf; Object.assign(s, fresh); });
           }
         }}>Start a new local draft</button>
         <p>Draft ID: <code className="breakable">{machine.id}</code>. This is a content hash, not a publication receipt.</p>
@@ -168,7 +172,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
           s.parts.push({ id: nextId(s, sourceKind), versionId: catalog.get(sourceKind).id, ...position, values: {} });
         })}>Add preview part</button></>}
         {publishedMode && <>
-          <p>Use an exact committed part ID from its author. No fixture can fill this genuine library. Search and discovery are a later task.</p>
+          <p>Use an exact committed part ID from its author or browse the library below. No fixture can fill this genuine library.</p>
           <label>Published part version ID<input type="text" maxLength={71} value={partId} disabled={busy} onChange={(e) => setPartId(e.target.value)} /></label>
           <button disabled={busy || machine.scene.parts.length >= 6 || !/^sha256:[a-f0-9]{64}$/.test(partId)} onClick={() => {
             const id = partId;
@@ -263,6 +267,11 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
           Original source address <code>{version.content.source.nft.collection}</code>.
         </li>)}</ul>
       </details>
+      {publishedMode && <WorkDiscovery library={catalog} disabled={running || busy || machine.scene.parts.length >= 6} onAddPart={(id) => {
+        if (!busy && !running && machine.scene.parts.length < 6) void edit((s) => {
+          s.parts.push({ id: nextId(s, 'part'), versionId: id, x: 0, y: 0, values: {} });
+        });
+      }} />}
       {publishedMode ? <WalletPanel ownerTools={false}>{(address) =>
         <MachinePublication key={`${machine.id}:${address}:${running}:${busy}`} machine={machine} library={catalog} address={address} disabled={running || busy} />
       }</WalletPanel> : <p>Drafts stay in this browser. There is no wallet or publication action in this public preview.</p>}

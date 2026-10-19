@@ -84,6 +84,13 @@ export async function publicationResponse(request: Request, auth: AuthStore, sto
           if (!part || part.content.kind !== 'part' || !part.ownership?.isOwner) throw new AuthError(403, 'Published source required');
           return { version: { id: part.id, content: part.content }, origin: 'holder-published' };
         }, resolveSource, 'publication');
+        if (machine.scene.remixOf) {
+          let parent: PublishedVersion | null;
+          try { parent = await store.version(machine.scene.remixOf); }
+          catch { throw new AuthError(503, 'Published parent unavailable'); }
+          if (!parent || parent.content.kind !== 'machine') throw new AuthError(403, 'Published parent machine required');
+          if (parent.content.machineId === machine.scene.machineId) throw new AuthError(400, 'A remix needs a new machine ID');
+        }
         const credits = [...new Map(machine.expanded.map((p) => [p.version.id, { versionId: p.version.id, author: p.version.content.author }])).values()]
           .sort((a, b) => a.versionId.localeCompare(b.versionId));
         version = { id: machine.id, content: machine.scene, credits, ownership: null };

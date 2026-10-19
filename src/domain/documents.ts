@@ -43,6 +43,7 @@ export interface PartVersion { id: string; content: PartContent }
 export interface PartInstance { id: string; versionId: string; x: number; y: number; values: Record<string, number> }
 export interface Scene extends Header {
   kind: 'machine'; machineId: string; author: string; seed: number; bounds: Bounds; message: string;
+  remixOf?: string;
   props: Prop[]; parts: PartInstance[]; connections: Connection[];
   inputs: { id: string; tick: number; target: Endpoint }[];
 }
@@ -288,7 +289,8 @@ export async function createPartVersion(value: unknown, resolveSource: SourceRes
 
 export function parseScene(value: unknown): Scene {
   canonicalJson(value);
-  const s = record(value, ['kind', 'schemaVersion', 'engineVersion', 'rulesVersion', 'machineId', 'author', 'seed', 'bounds', 'message', 'props', 'parts', 'connections', 'inputs']);
+  const hasParent = !!value && typeof value === 'object' && Object.hasOwn(value, 'remixOf');
+  const s = record(value, ['kind', 'schemaVersion', 'engineVersion', 'rulesVersion', 'machineId', 'author', 'seed', 'bounds', 'message', 'props', 'parts', 'connections', 'inputs', ...(hasParent ? ['remixOf'] : [])]);
   if (s.kind !== 'machine') throw new Error('Expected machine');
   const b = bounds(s.bounds);
   if (b.width !== WORLD_WIDTH || b.height !== WORLD_HEIGHT) throw new Error('Unsupported stage bounds');
@@ -306,6 +308,7 @@ export function parseScene(value: unknown): Scene {
     return { id: id(input.id), tick: integer(input.tick, 0, MAX_TICKS - 1), target: endpoint(input.target) };
   })).sort((a, b) => a.tick - b.tick || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return freezeDocument({ ...header(s), kind: 'machine', machineId: id(s.machineId), author: address(s.author), seed: integer(s.seed, 0, 0xffff_ffff),
+    ...(hasParent ? { remixOf: versionId(s.remixOf) } : {}),
     bounds: b, message: text(s.message, 80), props, parts, connections: list(s.connections, LIMITS.connections, parseEndpoint), inputs });
 }
 

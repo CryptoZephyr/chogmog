@@ -22,7 +22,7 @@ function previewSources(): Plugin {
           res.end(Buffer.from(await response.arrayBuffer()));
         }).catch(next);
     });
-    for (const path of ['/api/auth', '/api/owner', '/api/holder-source', '/api/publish', '/api/versions']) server.middlewares.use(path, (req, res) => {
+    for (const path of ['/api/auth', '/api/owner', '/api/holder-source', '/api/publish', '/api/versions', '/api/discover']) server.middlewares.use(path, (req, res) => {
       const host = req.headers.host;
       let response: Promise<Response>;
       try {

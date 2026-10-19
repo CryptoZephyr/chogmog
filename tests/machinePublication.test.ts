@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
-import { createPartVersion, resolvePreviewSource } from '../src/domain/documents';
+import { createPartVersion, parseScene, resolvePreviewSource } from '../src/domain/documents';
+import { contentId } from '../src/domain/canonical';
 import { MachineLibrary, PUBLISHED_DRAFT_KEY, machineCredits } from '../src/domain/machineLibrary';
 import { loadMachineDraft, newMachineDraft, saveMachineDraft } from '../src/domain/machineDraft';
 import { MachinePreview } from '../src/game/machinePreview';
@@ -63,6 +64,54 @@ async function harness() {
 }
 
 describe('T9 non-holder machine publication, actual client/API with explicit synthetic infrastructure', () => {
+  test('T11 remixes pin immutable parent lineage, preserve source credits and recover a lost save', async () => {
+    const h = await harness(), originalApproval = await h.prepare();
+    await publishMachine(h.context, h.version, originalApproval);
+    const reopened = await h.library.reopen(h.machine.id), draft = h.library.remix(reopened.machine);
+    expect(draft.machineId).not.toBe(reopened.machine.scene.machineId);
+    expect(draft.remixOf).toBe(h.machine.id);
+    expect(draft.parts).toEqual(h.machine.scene.parts); expect(draft.inputs).toEqual(h.machine.scene.inputs);
+    expect(draft.connections).toEqual(h.machine.scene.connections);
+    const machine = await h.library.validate({ ...draft, author: h.creator.address.toLowerCase(), message: 'My remix' }, 'publication');
+    const version = { id: machine.id, content: machine.scene, credits: machineCredits(machine) }, retry = key();
+    const prepared = await prepareMachine(h.context, version, retry);
+    if (!('approval' in prepared)) throw new Error('Expected review');
+    const original = h.context.api;
+    h.context.api = async (...args) => { const value = await original(...args); if (args[0].includes('op=commit')) throw new Error('Lost remix response'); return value; };
+    await expect(publishMachine(h.context, version, prepared.approval)).rejects.toThrow('Lost remix');
+    h.context.api = original;
+    expect(await prepareMachine(h.context, version, retry)).toHaveProperty('published.content.remixOf', h.machine.id);
+    const restored = await h.library.reopen(machine.id);
+    expect(restored.machine.scene).toEqual(machine.scene);
+    expect(restored.credits).toEqual(h.version.credits);
+    expect((await h.library.reopen(h.machine.id)).machine.scene).toEqual(h.machine.scene);
+    const grandchild = h.library.remix(restored.machine);
+    expect(grandchild.remixOf).toBe(machine.id);
+    expect(h.reader.ownerOf).not.toHaveBeenCalled();
+  });
+  test('T11 legacy hashes remain identical and malformed, missing, part or same-work parents are rejected', async () => {
+    const h = await harness();
+    expect(await contentId(parseScene(h.machine.scene))).toBe(h.machine.id);
+    expect(parseScene(h.machine.scene)).not.toHaveProperty('remixOf');
+    for (const value of [null, '', 'latest', `sha256:${'F'.repeat(64)}`, undefined]) {
+      expect(() => parseScene({ ...h.machine.scene, remixOf: value })).toThrow();
+    }
+    for (const remixOf of [`sha256:${'f'.repeat(64)}`, h.source.id]) {
+      const machine = await h.library.validate({ ...h.machine.scene, remixOf }, 'publication');
+      await expect(prepareMachine(h.context, { id: machine.id, content: machine.scene, credits: machineCredits(machine) }, key())).rejects.toThrow('parent');
+    }
+    const approval = await h.prepare(); await publishMachine(h.context, h.version, approval);
+    const sameWork = await h.library.validate({ ...h.machine.scene, remixOf: h.machine.id }, 'publication');
+    await expect(prepareMachine(h.context, { id: sameWork.id, content: sameWork.scene, credits: machineCredits(sameWork) }, key())).rejects.toThrow('new machine ID');
+    const draft = h.library.remix(h.machine);
+    const validated = await h.library.validate({ ...draft, author: h.creator.address.toLowerCase() }, 'publication');
+    const version = { id: validated.id, content: validated.scene, credits: machineCredits(validated) };
+    const prepared = await prepareMachine(h.context, version, key());
+    if (!('approval' in prepared)) throw new Error('Expected review');
+    const changed = await h.library.validate({ ...validated.scene, remixOf: `sha256:${'f'.repeat(64)}` }, 'publication');
+    await expect(publishMachine(h.context, { ...version, id: changed.id, content: changed.scene }, prepared.approval)).rejects.toThrow();
+    expect(h.versions.size).toBe(2);
+  });
   test('loads exact reusable holder records without sign-in, reviews without signing and reads back credits', async () => {
     const h = await harness(), approval = await h.prepare();
     expect(h.lookup).toHaveBeenCalledWith(h.source.id, true);

@@ -29,7 +29,7 @@ export function PartSandbox({ version, onRunning }: { version: PartVersion; onRu
       <button disabled={!view || error} onClick={() => stage.current?.reset()}>Reset part</button>
       {error && <button onClick={() => { setError(false); setView(null); setRetry(retry + 1); }}>Retry part engine</button>}
     </div>
-    <canvas className="part-canvas" ref={canvas} width={540} height={540} role="img" aria-label={`Unpublished part sandbox for token ${version.content.source.nft.tokenId}. Physical events are listed below.`} />
+    <canvas className="part-canvas" ref={canvas} width={540} height={540} role="img" aria-label={`Exact part sandbox for token ${version.content.source.nft.tokenId}. Physical events are listed below.`} />
     <p role="status">{error ? 'Part engine unavailable. The draft is kept. Retry to test it.' : !view ? 'Loading part engine…' : `${view.running ? 'Running' : 'Paused'} at tick ${view.snapshot.tick}/720. ${view.snapshot.bodies.length} physical objects.`}</p>
     {view && <ol aria-label="Part causal events">{view.snapshot.events.map((event, i) => <li key={i}>Tick {event.tick}: {event.text}</li>)}</ol>}
   </section>;

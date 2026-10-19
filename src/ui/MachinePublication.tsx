@@ -75,6 +75,7 @@ export function MachinePublication({ machine, library, address, disabled }:
     </li>)}</ul>
     {reviewed && <section aria-label="Machine publication approval">
       <p className="breakable">Exact version {reviewed.version.id}. Author {reviewed.version.content.author}. Expires {reviewed.approval.expiresAt}.</p>
+      {reviewed.version.content.remixOf && <p className="breakable">Remixed from exact parent {reviewed.version.content.remixOf}. This lineage is included in the signed content hash.</p>}
       <p>No transaction, payment, NFT approval or custody. Editing, running or changing wallets cancels this review.</p>
       <pre className="breakable">{reviewed.approval.message}</pre>
       <details><summary>Exact machine and original credits</summary><pre className="breakable">{JSON.stringify(reviewed.version, null, 2)}</pre></details>

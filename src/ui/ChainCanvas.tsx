@@ -93,7 +93,7 @@ export function ChainCanvas() {
   const stopKey = stalled ? (view.snapshot.events.some((e) => e.type === 'sensor') ? (view.snapshot.balloonPopped
     ? (view.snapshot.events.some((e) => e.type === 'lifted') ? (view.snapshot.events.some((e) => e.type === 'teleported') ? 'lever' : 'portal') : 'lift')
     : 'laser') : 'trigger') : null;
-  const coach = coachOff || !ready || view.running ? null
+  const coach = coachOff || !ready || view.running || stopKey ? null
     : runs === 0 ? { text: 'Press Run.', field: null }
     : runs === 1 && complete ? { text: "That's the chain. Change one thing.", field: 'portalExitY' }
     : runs >= 2 && complete && scene.liftToken === '846' ? { text: 'Now swap the Fire Chog.', field: 'liftToken' }

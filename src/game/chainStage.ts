@@ -358,7 +358,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
 
     const labelsOn = showLabels || (snapshot.tick === 0 && !running);
     for (const label of labels) {
-      label.item.visible = labelsOn;
+      label.item.visible = labelsOn && !(label.item.text === 'Laser' && !laserColours);
       const [x, y] = label.at();
       label.item.position.set(px(x), py(y));
     }
@@ -370,7 +370,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
 
     stamp.clear();
     if (snapshot.tick >= MAX_TICKS && !snapshot.bannerOpen) {
-      const where = { trigger: [g.sensor.x, g.sensor.y + 0.55], laser: [g.balloon.x, g.balloon.y], lift: [g.lift.x, 3.9], portal: [g.entrance.x - 0.75, g.entrance.y], lever: [g.lever.x, g.lever.y + 0.6] }[stopPoint(snapshot)];
+      const where = { trigger: [g.sensor.x, g.sensor.y + 0.55], laser: [g.laser.x + 0.65, g.laser.y - 0.05], lift: [g.lift.x, 3.9], portal: [g.entrance.x, g.entrance.y - 0.7], lever: [g.lever.x, g.lever.y + 0.6] }[stopPoint(snapshot)];
       const sx = px(where[0]), sy = py(where[1]);
       stamp.circle(sx, sy, 22).fill(theme.white).stroke({ color: theme.ink, width: 3 });
       stamp.moveTo(sx - 9, sy - 9).lineTo(sx + 9, sy + 9).moveTo(sx + 9, sy - 9).lineTo(sx - 9, sy + 9).stroke({ color: theme.ink, width: 4, cap: 'round' });

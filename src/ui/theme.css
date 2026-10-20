@@ -30,6 +30,11 @@
 .app .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 24px; padding: 0 16px; }
 .app .wordmark { font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: 0; text-transform: lowercase; color: var(--ink); text-decoration: none; position: relative; }
 .app .wordmark .cheek { display: inline-block; position: relative; }
+.app .brand { display: flex; flex-direction: column; gap: 2px; }
+.app .tagline { font-size: 12px; font-weight: 700; color: var(--ink); }
+.app .tabs a, .app .run, .app .btn, .app .toggle { gap: 8px; }
+.app .run, .app .btn { display: inline-flex; align-items: center; justify-content: center; }
+.app .abilities .power-icon { flex: none; vertical-align: -3px; margin-right: 4px; color: var(--ink); }
 .app .wordmark .cheek::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 12px; height: 6px; margin-left: -6px; border-radius: 50%; background: var(--blush); }
 .app .tabs { display: flex; gap: 4px; align-self: stretch; }
 .app .tabs a { display: flex; align-items: center; padding: 0 14px; min-height: 44px; margin: auto 0; color: var(--ink); text-decoration: none; font-weight: 700; border-radius: 10px; border: 2px solid transparent; }

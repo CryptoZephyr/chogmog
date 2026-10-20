@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowCounterClockwise, ArrowFatRight, Flame, Lightning, MagicWand, Pause, Play, SpeakerHigh, SpeakerSlash, type Icon } from '@phosphor-icons/react';
 import { DEFAULT_CHAIN, loadChain, saveChain, type ChainScene } from '../domain/chainScene';
 import { getPreview, PREVIEWS, provenance, type Preview } from '../domain/chog';
 import { MAX_TICKS } from '../domain/fallingScene';
@@ -20,6 +21,7 @@ const STOPPED: Record<StopPoint, string> = {
   portal: 'Stopped at the portal. Needs a Wizard hat, so try Chog #338.',
   lever: 'Stopped at the lever. The confetti missed. Try exit height 4.',
 };
+const POWER_ICON: Record<Power, Icon> = { laser: Lightning, lift: Flame, portal: MagicWand };
 const PLAY_WALL = wallFor(getPreview('846').metadata.attributes.find((t) => t.trait_type === 'Background')?.value);
 const chogName = (source: Preview) => `Chog #${source.artworkNumber}`;
 const toneFor = (power: Power, source: Preview) => power === 'laser'
@@ -136,8 +138,8 @@ export function ChainCanvas() {
             <p className="token">Token {source.tokenId}</p>
           </div>
           <ul className="abilities">
-            {powers.map((power) => <li key={power}><span className="swatch" style={{ background: toneFor(power, source) }} />{POWER_NAME[power]}, from {source.metadata.attributes.find((t) => (power === 'lift' ? t.trait_type === 'Aura' : power === 'portal' ? t.trait_type === 'Head' : t.trait_type === 'Eyes'))?.value}</li>)}
-            <li><span className="swatch" style={{ background: colour.ink }} />Push and release</li>
+            {powers.map((power) => { const PowerIcon = POWER_ICON[power]; return <li key={power}><span className="swatch" style={{ background: toneFor(power, source) }} /><PowerIcon className="power-icon" size={18} weight="bold" aria-hidden />{POWER_NAME[power]}, from {source.metadata.attributes.find((t) => (power === 'lift' ? t.trait_type === 'Aura' : power === 'portal' ? t.trait_type === 'Head' : t.trait_type === 'Eyes'))?.value}</li>; })}
+            <li><span className="swatch" style={{ background: colour.ink }} /><ArrowFatRight className="power-icon" size={18} weight="bold" aria-hidden />Push and release</li>
           </ul>
         </article>;
       })}
@@ -155,11 +157,11 @@ export function ChainCanvas() {
         })}
       </ul>
       <div className="panel runbar" ref={runbar}>
-        <button className="run" disabled={!canRun} onClick={run}>Run</button>
-        <button className="btn" disabled={!ready || !view.running} onClick={pause}>Pause</button>
-        <button className="btn" disabled={!ready} onClick={reset}>Reset</button>
+        <button className="run" disabled={!canRun} onClick={run}><Play size={20} weight="bold" aria-hidden />Run</button>
+        <button className="btn" disabled={!ready || !view.running} onClick={pause}><Pause size={18} weight="bold" aria-hidden />Pause</button>
+        <button className="btn" disabled={!ready} onClick={reset}><ArrowCounterClockwise size={18} weight="bold" aria-hidden />Reset</button>
         <label className="toggle"><input type="checkbox" checked={labels} onChange={toggleLabels} /> Show labels</label>
-        <label className="toggle"><input type="checkbox" checked={soundOn} onChange={toggleSound} /> Sound</label>
+        <label className="toggle"><input type="checkbox" checked={soundOn} onChange={toggleSound} />{soundOn ? <SpeakerHigh size={18} weight="bold" aria-hidden /> : <SpeakerSlash size={18} weight="bold" aria-hidden />}Sound</label>
         <p className="status" role="status">{status}</p>
         <span className="tick" aria-hidden="true">Tick {view?.snapshot.tick ?? 0}/{MAX_TICKS}</span>
       </div>

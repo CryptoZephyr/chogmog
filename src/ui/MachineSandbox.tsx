@@ -27,13 +27,13 @@ export function MachineSandbox({ machine, catalog, onRunning, editing }:
     <h2>Test this machine</h2>
     <p>Run this exact arrangement, then change placement, wires or exposed controls and try again. Physical intersections and typed connections decide each outcome.</p>
     <div className="controls">
-      <button disabled={editing || !view || failed || view.running || view.snapshot.tick >= MAX_TICKS} onClick={() => stage.current?.run()}>Run machine</button>
+      <button className="run" disabled={editing || !view || failed || view.running || view.snapshot.tick >= MAX_TICKS} onClick={() => stage.current?.run()}>Run machine</button>
       <button disabled={!view?.running || failed} onClick={() => stage.current?.pause()}>Pause machine</button>
       <button disabled={!view || failed} onClick={() => stage.current?.reset()}>Reset machine</button>
       {failed && <button onClick={() => { setFailed(false); setView(null); setRetry(retry + 1); }}>Retry machine engine</button>}
     </div>
-    <canvas ref={canvas} className="machine-canvas" role="img" width={720} height={480}
-      aria-label="Neutral machine stage. Physical actions and outcomes appear in the causal event list." />
+    <canvas ref={canvas} className="machine-canvas" role="img" width={960} height={640}
+      aria-label="Machine stage. Physical actions and outcomes appear in the cause and effect list." />
     <p role="status">{failed ? 'Machine engine unavailable. Your draft remains saved. Retry to run it.' :
       !view ? 'Loading physics engine…' : `${view.running ? 'Running' : 'Paused'} at tick ${view.snapshot.tick}/${MAX_TICKS}. ${view.snapshot.bodyCount} physical bodies. Message ${view.snapshot.bannerOpen ? 'open' : 'closed'}.`}</p>
     {view?.snapshot.tick === MAX_TICKS && <p>Run complete. Reset to play the same draft again.</p>}

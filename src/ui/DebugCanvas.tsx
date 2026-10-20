@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_SCENE, FIXED_STEP, MAX_TICKS, type FallingScene } from '../domain/fallingScene';
 import { loadScene, saveScene } from '../domain/sceneStorage';
 import type { Stage, StageView } from '../game/stage';
+import { AppFrame } from './AppFrame';
 
 export function DebugCanvas() {
   const host = useRef<HTMLDivElement>(null);
@@ -45,18 +46,16 @@ export function DebugCanvas() {
   const complete = view?.snapshot.tick === MAX_TICKS;
 
   return (
-    <main>
-      <h1>Chogmog</h1>
-      <p>Make mischief move.</p>
-      <h2>T0 development harness</h2>
-      <p>Neutral debug canvas, not the final product design. No NFTs, traits, wallets or holder publication are connected yet.</p>
+    <AppFrame tab={null} layout="single"><main className="panel single-panel">
+      <h1 className="screen-title">Physics test bench</h1>
+      <p className="fineprint">The original T0 falling-ball check. No NFTs, traits, wallets or publication are connected here.</p>
       <p role="status">
         {error ? 'Could not initialize WebAssembly or WebGL. Try a supported browser and reload the page.'
           : !ready ? 'Loading physics and renderer…'
           : view.running ? 'Running' : complete ? 'Run complete. Reset to run again.' : 'Ready, paused'}
       </p>
       <div className="controls">
-        <button disabled={!ready || view.running || complete} onClick={() => stage.current?.run()}>Run</button>
+        <button className="run" disabled={!ready || view.running || complete} onClick={() => stage.current?.run()}>Run</button>
         <button disabled={!ready || !view.running} onClick={() => stage.current?.pause()}>Pause</button>
         <button disabled={!ready} onClick={() => stage.current?.reset(scene)}>Reset</button>
       </div>
@@ -84,7 +83,7 @@ export function DebugCanvas() {
           : 'Waiting for the engine'}
       </output>
       <p>This is the original T0 regression harness. It does not use the source traits connected in the first-chain preview.</p>
-      <p><a href="/">Open the trait-powered chain preview</a></p>
-    </main>
+      <p><a href="./">Play the trait-powered starter</a></p>
+    </main></AppFrame>
   );
 }

@@ -2,37 +2,34 @@ import type { PartVersion } from '../domain/documents';
 import { MAX_TICKS } from '../domain/fallingScene';
 import { FixedStepClock } from './fixedStepClock';
 import { PartPreview, type PartSnapshot } from './partPreview';
+import { colour, loadFonts } from '../ui/tokens';
+import { beam, board, inkCircle, laserFor, liftColumn, plank, portalRing, tag } from './canvasArt';
 
 export interface PartStage {
   run(): void; pause(): void; reset(): void; dispose(): void;
 }
 export async function createPartStage(canvas: HTMLCanvasElement, version: PartVersion, signal: AbortSignal,
   notify: (snapshot: PartSnapshot, running: boolean) => void): Promise<PartStage> {
-  const simulation = await PartPreview.create(version);
+  const [simulation] = await Promise.all([PartPreview.create(version), loadFonts()]);
   if (signal.aborted) { simulation.dispose(); throw new DOMException('Cancelled', 'AbortError'); }
   const ctx = canvas.getContext('2d');
   if (!ctx) { simulation.dispose(); throw new Error('Canvas unavailable'); }
   const clock = new FixedStepClock();
   let running = false, disposed = false, frame = 0, previous = 0;
   const scale = 90, y = (n: number) => 540 - n * scale;
-  const circle = (x: number, worldY: number, radius: number, color: string) => {
-    ctx.beginPath(); ctx.arc(x * scale, y(worldY), radius * scale, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-  };
+  const tone = laserFor(version.content.source.nft.tokenId);
   const draw = (s: PartSnapshot) => {
-    ctx.clearRect(0, 0, 540, 540); ctx.fillStyle = '#999'; ctx.fillRect(0, y(0.2), 540, 18);
-    for (const p of version.content.props) {
-      if (p.type === 'balloon' && !s.balloonPopped) circle(p.x, p.y, p.radius, '#999');
-      if (p.type === 'ramp') {
-        ctx.save(); ctx.translate(p.x * scale, y(p.y)); ctx.rotate(-p.angle); ctx.fillStyle = '#666'; ctx.fillRect(-p.width * scale / 2, -p.height * scale / 2, p.width * scale, p.height * scale); ctx.restore();
-      }
-    }
+    board(ctx, 540, 540, scale, y(0.2));
     const a = version.content.actions[0];
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
-    if (a.type === 'lift') ctx.strokeRect((a.x - a.width / 2) * scale, y(a.y + a.height / 2), a.width * scale, a.height * scale);
-    if (a.type === 'portal') { circle(a.x, a.y, a.radius, '#aab'); circle(a.exitX, a.exitY, a.radius, '#aab'); }
-    if (s.ray && s.tick < 45) { ctx.beginPath(); ctx.moveTo(a.x * scale, y(a.y)); ctx.lineTo(s.ray.x * scale, y(s.ray.y)); ctx.stroke(); }
-    for (const b of s.bodies) circle(b.x, b.y, b.radius, '#222');
-    ctx.fillStyle = '#222'; ctx.font = '14px system-ui'; ctx.fillText(`Token ${version.content.source.nft.tokenId}: ${a.type}`, 12, 22);
+    if (a.type === 'lift') liftColumn(ctx, (a.x - a.width / 2) * scale, y(a.y + a.height / 2), a.width * scale, a.height * scale);
+    if (a.type === 'portal') { portalRing(ctx, a.x * scale, y(a.y), a.radius * scale); portalRing(ctx, a.exitX * scale, y(a.exitY), a.radius * scale); }
+    for (const p of version.content.props) {
+      if (p.type === 'balloon' && !s.balloonPopped) inkCircle(ctx, p.x * scale, y(p.y), p.radius * scale);
+      if (p.type === 'ramp') plank(ctx, p.x * scale, y(p.y), p.width * scale, p.height * scale, p.angle);
+    }
+    if (s.ray && s.tick < 45) beam(ctx, a.x * scale, y(a.y), s.ray.x * scale, y(s.ray.y), tone.bright);
+    for (const b of s.bodies) inkCircle(ctx, b.x * scale, y(b.y), b.radius * scale, '#FFFFFF', colour.ink, b.radius > 0.1 ? 3 : 1.5);
+    tag(ctx, `Chog token ${version.content.source.nft.tokenId}: ${a.type}`, 12, 12, 15);
   };
   const publish = () => { const s = simulation.snapshot(); draw(s); notify(s, running); };
   const pause = () => { if (disposed) return; running = false; cancelAnimationFrame(frame); clock.reset(); publish(); };

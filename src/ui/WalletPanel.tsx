@@ -78,7 +78,7 @@ export function WalletPanel({ ownerTools = true, children }: { ownerTools?: bool
   };
 
   return <section aria-label="Wallet and Genesis owner check">
-    <h2>Wallet sign-in, development check</h2>
+    <h2>Sign in (no transaction)</h2>
     <p>Optional. Free play needs no wallet. Signing a login message is gas-free and grants no token approvals. Preview art is never proof of ownership.</p>
     <p role="status">{status}{address ? ` Address: ${address}` : ''}</p>
     <div className="controls">

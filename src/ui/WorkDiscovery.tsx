@@ -6,6 +6,7 @@ import { MachineLibrary, machineCredits } from '../domain/machineLibrary';
 import { api } from './walletClient';
 import { PartSandbox } from './PartSandbox';
 import { MachineSandbox } from './MachineSandbox';
+import { AppFrame } from './AppFrame';
 
 type Selection = { part: PartVersion } | { machine: Machine };
 const versionUrl = (id: string) => `?harness=published&version=${encodeURIComponent(id)}`;
@@ -79,8 +80,9 @@ function WorkResults({ kind, q, after, library, onNext, onAddPart, disabled }: {
     <button onClick={() => { setError(false); setPage(null); setRetry(retry + 1); }}>Retry discovery</button></p>;
   if (!page) return <p role="status">Loading committed {kind === 'part' ? 'parts' : 'machines'}…</p>;
   return <>
+    {!page.items.length && <p className="empty-title">{q ? 'No matches' : 'Nothing published yet'}</p>}
     {!page.items.length && <p role="status">{q ? 'No committed versions match this search.' : 'No committed versions are available yet.'} Public previews remain separate.</p>}
-    <ul aria-label={kind === 'part' ? 'Published part library' : 'Published machine gallery'}>{page.items.map((item) => <li key={item.id}>
+    <ul className="cards" aria-label={kind === 'part' ? 'Published part library' : 'Published machine gallery'}>{page.items.map((item) => <li key={item.id}>
       <p>{item.workId}: {item.description}{item.tokenId && `, token ${item.tokenId}`}.</p>
       <p className="breakable">Version {item.id}. Author {item.author}. Published {item.publishedAt}.</p>
       <button onClick={() => setSelected(item)}>Inspect and run {item.workId}</button>
@@ -104,7 +106,7 @@ export function WorkDiscovery({ library, initialKind = 'part', onAddPart, disabl
   return <section aria-label="Published work discovery">
     <h2>Gallery and part library</h2>
     <p>Browse committed immutable versions without a wallet. New versions never replace old pins. Public-data previews do not appear here.
-      No activity or reuse counts are invented. This is a neutral development harness, not the final product design.</p>
+      No activity or reuse counts are invented.</p>
     <label>Browse
       <select value={kind} onChange={(e) => { setKind(e.target.value as WorkKind); setAfter(null); }}>
         <option value="part">Reusable holder parts</option><option value="machine">Published machines</option>
@@ -133,11 +135,11 @@ export function DiscoveryPageView({ initialKind = 'machine' }: { initialKind?: W
       .then((value) => { if (active) setLibrary(value); }).catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, [retry]);
-  return <main>
-    <h1>Chogmog</h1><p>Make mischief move.</p>
-    <nav><a href="?harness=chain">Run the public-data starter preview</a> · <a href="?harness=machine">Free preview builder</a> · <a href="?harness=published">Published-part draft</a></nav>
-    <p>The starter and preview builder use unverified public-data parts, never genuine holder publications. They work without a wallet even while the published backend is unavailable.</p>
+  return <AppFrame tab="gallery" layout="single"><main className="panel single-panel">
+    <h1 className="screen-title">{initialKind === 'part' ? 'Part library' : 'Gallery'}</h1>
+    <p className="fineprint"><a href="./">Play the starter</a> · <a href="?harness=machine">Free preview builder</a> · <a href="?harness=published">Published-part draft</a></p>
+    <p className="fineprint">The starter and preview builder use unverified public-data parts, never genuine holder publications. They work without a wallet even while the published backend is unavailable.</p>
     {error ? <p role="alert">Library initialization failed. <button onClick={() => { setError(false); setRetry(retry + 1); }}>Retry library</button></p>
       : library ? <WorkDiscovery library={library} initialKind={initialKind} /> : <p role="status">Preparing exact-version library…</p>}
-  </main>;
+  </main></AppFrame>;
 }

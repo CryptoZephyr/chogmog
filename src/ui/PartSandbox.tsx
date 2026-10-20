@@ -24,7 +24,7 @@ export function PartSandbox({ version, onRunning }: { version: PartVersion; onRu
     <h4>Test this exact part</h4>
     <p>One input at Run starts push, release or laser. Lift and portals react to the physical ball entering their region. This sandbox tests one part, not a complete reusable machine.</p>
     <div className="controls">
-      <button disabled={!view || error || view.running || view.snapshot.tick >= 720} onClick={() => stage.current?.run()}>Run part</button>
+      <button className="run" disabled={!view || error || view.running || view.snapshot.tick >= 720} onClick={() => stage.current?.run()}>Run part</button>
       <button disabled={!view?.running || error} onClick={() => stage.current?.pause()}>Pause part</button>
       <button disabled={!view || error} onClick={() => stage.current?.reset()}>Reset part</button>
       {error && <button onClick={() => { setError(false); setView(null); setRetry(retry + 1); }}>Retry part engine</button>}

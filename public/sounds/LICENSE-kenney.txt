@@ -1,0 +1,29 @@
+Sound effects in this folder are re-encoded (mono MP3, some trimmed) from three Kenney packs:
+drop.mp3 = Interface Sounds drop_002, click.mp3 = Interface Sounds switch_002, zap.mp3 = Sci-fi Sounds laserSmall_001,
+pop.mp3 = Interface Sounds pluck_002, whoosh.mp3 = Sci-fi Sounds thrusterFire_000, bloop.mp3 = Sci-fi Sounds slime_000,
+bonk.mp3 = Impact Sounds impactPlank_medium_000, clunk.mp3 = Impact Sounds impactMetal_heavy_000, tada.mp3 = Interface Sounds confirmation_002.
+All three packs are by Kenney under the same CC0 licence, reproduced below.
+
+	
+
+	Interface Sounds (1.0)
+
+	Created/distributed by Kenney (www.kenney.nl)
+	Creation date: 11-02-2020
+
+			------------------------------
+
+	License: (Creative Commons Zero, CC0)
+	http://creativecommons.org/publicdomain/zero/1.0/
+
+	This content is free to use in personal, educational and commercial projects.
+
+	Support us by crediting Kenney or www.kenney.nl (this is not mandatory)
+
+			------------------------------
+
+	Donate:   http://support.kenney.nl
+	Patreon:  http://patreon.com/kenney/
+
+	Follow on Twitter for updates:
+	http://twitter.com/KenneyNL

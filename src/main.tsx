@@ -5,6 +5,7 @@ import { ChainCanvas } from './ui/ChainCanvas';
 import { MachineComposer } from './ui/MachineComposer';
 import { DiscoveryPageView } from './ui/WorkDiscovery';
 import './ui/debug.css';
+import './ui/theme.css';
 
 const harness = new URLSearchParams(location.search).get('harness');
 createRoot(document.getElementById('root')!).render(

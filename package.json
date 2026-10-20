@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "0.21.0",
+    "@phosphor-icons/react": "2.1.10",
     "pg": "8.16.3",
     "pixi.js": "8.22.0",
     "react": "19.3.0",

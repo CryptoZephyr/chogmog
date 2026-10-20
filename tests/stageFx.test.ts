@@ -1,0 +1,96 @@
+import { describe, expect, it } from 'vitest';
+import type { ChainEvent } from '../src/game/chain';
+import { activeWords, BOB_TICKS, bobOffset, pathPrefix, pulseProgress, PULSE_TICKS, separateWords, SHAKE_TICKS, shakeOffset, WORD_TICKS, wireSpent } from '../src/game/stageFx';
+
+const event = (tick: number, type: ChainEvent['type'], target = 'x'): ChainEvent => ({ tick, type, actor: 'a', target });
+
+describe('stage effects', () => {
+  it('shows one sound word per event kind for a bounded time after its first occurrence', () => {
+    const events = [event(0, 'released'), event(40, 'sensor'), event(41, 'laser'), event(60, 'lifted', 'c1'), event(70, 'lifted', 'c2')];
+    expect(activeWords(events, 45).map((w) => w.type)).toEqual(['sensor', 'laser']);
+    expect(activeWords(events, 80)).toEqual([{ type: 'lifted', age: 20 }]);
+    expect(activeWords(events, 60 + WORD_TICKS)).toEqual([]);
+  });
+
+  it('leaves the banner word to the banner itself', () => {
+    expect(activeWords([event(300, 'lever'), event(300, 'banner')], 301).map((w) => w.type)).toEqual(['lever']);
+  });
+
+  it('runs a signal pulse from the first event to the end of its wire', () => {
+    const events = [event(40, 'sensor')];
+    expect(pulseProgress(events, 'sensor', 39)).toBeNull();
+    expect(pulseProgress(events, 'sensor', 40)).toBeCloseTo(1 / PULSE_TICKS);
+    expect(pulseProgress(events, 'sensor', 40 + PULSE_TICKS - 1)).toBe(1);
+    expect(pulseProgress(events, 'sensor', 40 + PULSE_TICKS)).toBeNull();
+    expect(pulseProgress(events, 'lever', 45)).toBeNull();
+  });
+
+  it('cuts a polyline at a fraction of its length', () => {
+    const wire = [[0, 0], [2, 0], [2, 2]] as const;
+    expect(pathPrefix(wire, 0)).toEqual([[0, 0], [0, 0]]);
+    expect(pathPrefix(wire, 0.25)).toEqual([[0, 0], [1, 0]]);
+    expect(pathPrefix(wire, 0.75)).toEqual([[0, 0], [2, 0], [2, 1]]);
+    expect(pathPrefix(wire, 1)).toEqual([[0, 0], [2, 0], [2, 2]]);
+    expect(pathPrefix(wire, 3)).toEqual([[0, 0], [2, 0], [2, 2]]);
+  });
+
+  it('bobs a Chog once per power kind it fires, never past 4px', () => {
+    const events: ChainEvent[] = [{ ...event(40, 'laser'), sourceToken: '533' }, { ...event(60, 'lifted'), sourceToken: '846' }, { ...event(62, 'lifted'), sourceToken: '846' }];
+    expect(bobOffset(events, '533', 39)).toBe(0);
+    expect(bobOffset(events, '533', 45)).toBeGreaterThan(3);
+    expect(bobOffset(events, '533', 40 + BOB_TICKS)).toBe(0);
+    expect(bobOffset(events, '846', 60 + BOB_TICKS)).toBe(0);
+    for (let tick = 0; tick < 100; tick++) expect(bobOffset(events, '846', tick)).toBeLessThanOrEqual(4);
+  });
+
+  it('shakes the stage only for a short decaying window after the first pop', () => {
+    const events = [event(50, 'popped'), event(70, 'popped')];
+    expect(shakeOffset(events, 49)).toEqual([0, 0]);
+    expect(Math.abs(shakeOffset(events, 50)[0])).toBe(4);
+    expect(Math.abs(shakeOffset(events, 54)[0])).toBeLessThan(4);
+    expect(shakeOffset(events, 50 + SHAKE_TICKS)).toEqual([0, 0]);
+    expect(shakeOffset(events, 70)).toEqual([0, 0]);
+  });
+
+  it('keeps a wire tinted once its pulse has passed', () => {
+    const events = [event(40, 'sensor')];
+    expect(wireSpent(events, 'sensor', 40 + PULSE_TICKS - 1)).toBe(false);
+    expect(wireSpent(events, 'sensor', 40 + PULSE_TICKS)).toBe(true);
+    expect(wireSpent(events, 'lever', 500)).toBe(false);
+  });
+
+  it('moves later words off earlier ones and keeps every word on the stage', () => {
+    const boxes = [{ x: 100, y: 100, halfW: 60, halfH: 20 }, { x: 120, y: 110, halfW: 40, halfH: 20 }, { x: 110, y: 105, halfW: 50, halfH: 20 }, { x: 400, y: 100, halfW: 30, halfH: 20 }];
+    const placed = separateWords(boxes, 640);
+    expect(placed[0]).toEqual(boxes[0]);
+    expect(placed[3]).toEqual(boxes[3]);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      const overlap = Math.abs(a.x - b.x) < a.halfW + b.halfW && Math.abs(a.y - b.y) < a.halfH + b.halfH;
+      expect(overlap, `${i} vs ${j}`).toBe(false);
+    }
+    for (const box of separateWords([{ x: 50, y: 630, halfW: 40, halfH: 20 }, { x: 50, y: 630, halfW: 40, halfH: 20 }], 640)) {
+      expect(box.y - box.halfH).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.halfH).toBeLessThanOrEqual(640);
+    }
+  });
+
+  it('finds a free spot for a word squeezed between two others', () => {
+    const boxes = [{ x: 260, y: 352, halfW: 80, halfH: 30 }, { x: 264, y: 464, halfW: 90, halfH: 30 }, { x: 400, y: 400, halfW: 100, halfH: 30 }, { x: 272, y: 272, halfW: 120, halfH: 30 }];
+    const placed = separateWords(boxes, 640);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      expect(Math.abs(a.x - b.x) < a.halfW + b.halfW && Math.abs(a.y - b.y) < a.halfH + b.halfH, `${i} vs ${j}`).toBe(false);
+    }
+    for (const box of placed) expect(box.y - box.halfH >= 0 && box.y + box.halfH <= 640).toBe(true);
+  });
+
+  it('keeps words apart when their measured sizes are fractional', () => {
+    const boxes = [{ x: 264, y: 464, halfW: 128.98765140997378, halfH: 52.57410746323263 }, { x: 260, y: 352, halfW: 86.70148642808248, halfH: 49.60923170142476 }, { x: 400, y: 400, halfW: 96.42460397218632, halfH: 50.290963789167115 }, { x: 272, y: 272, halfW: 170.22339683251175, halfH: 55.46533352205634 }];
+    const placed = separateWords(boxes, 640);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      expect(Math.abs(a.x - b.x) < a.halfW + b.halfW - 0.01 && Math.abs(a.y - b.y) < a.halfH + b.halfH - 0.01, `${i} vs ${j}`).toBe(false);
+    }
+  });
+});

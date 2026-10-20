@@ -136,7 +136,14 @@ test('hosted activation never uses generic secrets or unsafe origins/TLS', () =>
   for (const APP_ORIGIN of ['http://chogmog.test', 'https://chogmog.test/', 'https://user@chogmog.test']) {
     expect(() => backendConfiguration({ APP_ORIGIN, CHOGMOG_BACKEND_ENABLED: 'true', CHOGMOG_DATABASE_URL: 'dedicated' })).toThrow();
   }
-  for (const url of ['postgres://user:password@untrusted.example/db?sslmode=verify-full', 'postgres://user:password@db.test.supabase.co/db?sslmode=no-verify']) {
+  for (const url of ['postgres://user:password@untrusted.example/db?sslmode=verify-full', 'postgres://user:password@db.test.supabase.co/db?sslmode=no-verify',
+    'postgres://user:password@ep-test-pooler.us-east-2.aws.neon.tech/db?sslmode=require', 'postgres://user:password@ep-test.neon.tech.untrusted.example/db?sslmode=verify-full',
+    'postgres://user:password@evilneon.tech/db?sslmode=verify-full']) {
     expect(() => databasePool(url)).toThrow();
   }
+});
+
+test('a dedicated Neon database is accepted only with verify-full TLS', async () => {
+  const pool = databasePool('postgres://user:password@ep-test-pooler.us-east-2.aws.neon.tech/db?sslmode=verify-full');
+  await pool.end();
 });

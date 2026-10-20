@@ -136,6 +136,15 @@ export class MachinePreview {
         item.body.applyImpulse({ x: Math.cos(node.angle) * node.impulse, y: Math.sin(node.angle) * node.impulse }, true);
         this.emit(node.id, 'pushed', 'pushed a physical body', [item.id]);
       }
+    } else if (node.type === 'shout' && to.socket === 'trigger' && !this.fired.has(node.id)) {
+      this.fired.add(node.id);
+      for (const item of this.bodies) {
+        const p = item.body.translation(), dx = p.x - node.x, dy = p.y - node.y, distance = Math.hypot(dx, dy);
+        if (!item.body.isDynamic() || distance > node.range) continue;
+        const direction = distance < 1e-6 ? { x: 0, y: 1 } : { x: dx / distance, y: dy / distance };
+        item.body.applyImpulse({ x: direction.x * node.impulse, y: direction.y * node.impulse }, true);
+        this.emit(node.id, 'shouted', 'shouted a physical body', [item.id]);
+      }
     } else if (node.type === 'laser' && to.socket === 'trigger' && !this.fired.has(node.id)) {
       this.fired.add(node.id);
       const direction = { x: Math.cos(node.angle), y: Math.sin(node.angle) };

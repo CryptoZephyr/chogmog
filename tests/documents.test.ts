@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, test, vi } from 'vitest';
 import { canonicalJson, contentId, MAX_DOCUMENT_BYTES } from '../src/domain/canonical';
-import { createPartVersion, ENGINE_VERSION, parseScene, parseSourcePin, previewSourcePin, resolvePreviewSource, validateMachine,
+import { createPartVersion, ENGINE_VERSION, parsePart, parseScene, parseSourcePin, previewSourcePin, resolvePreviewSource, validateMachine,
   type PartContent, type PartResolver, type PartVersion, type Scene } from '../src/domain/documents';
 import packageJson from '../package.json';
 
@@ -27,6 +27,19 @@ function part(): PartContent {
       { from: { objectId: 'laser', socket: 'fired' }, to: { objectId: 'balloon', socket: 'hit' } },
     ],
   };
+}
+function shoutPart(token = '846'): PartContent {
+  const p = part();
+  p.partId = 'shout-part'; p.source = previewSourcePin(token); p.props = [];
+  p.actions = [{ id: 'shout', type: 'shout', x: 1, y: 1, impulse: 5, range: 1.5 },
+    { id: 'lift', type: 'lift', x: 1, y: 1, width: 1, height: 1, acceleration: 12, maxSpeed: 4 }];
+  p.sockets = [
+    { id: 'trigger', direction: 'input', kind: 'event', target: { objectId: 'shout', socket: 'trigger' } },
+    { id: 'shouted', direction: 'output', kind: 'body', target: { objectId: 'shout', socket: 'shouted' } },
+  ];
+  p.controls = [{ id: 'strength', objectId: 'shout', field: 'impulse', min: 1, max: 8, default: 5 }];
+  p.connections = [{ from: { objectId: 'shout', socket: 'shouted' }, to: { objectId: 'lift', socket: 'body' } }];
+  return p;
 }
 function scene(version: PartVersion): Scene {
   return {
@@ -103,6 +116,28 @@ describe('source pins and immutable one-Chog parts', () => {
       .rejects.toThrow(/snapshot mismatch/);
     const noLaser = part(); noLaser.source = previewSourcePin('846');
     await expect(make(noLaser)).rejects.toThrow(/trait kit/);
+    await expect(make(shoutPart('533'))).rejects.toThrow(/trait kit/);
+  });
+  test('parses, round-trips and wires a bounded shout action', async () => {
+    const content = shoutPart();
+    const version = await make(content);
+    const parsed = parsePart(content);
+    expect(parsed.actions.find((action) => action.id === 'shout')).toEqual({ id: 'shout', type: 'shout', x: 1, y: 1, impulse: 5, range: 1.5 });
+    expect(version).toMatchObject({ content: parsed });
+    expect(parsed.connections).toEqual([{ from: { objectId: 'shout', socket: 'shouted' }, to: { objectId: 'lift', socket: 'body' } }]);
+    const machineScene = scene(version);
+    machineScene.props.push({ id: 'sensor', type: 'sensor', x: 8, y: 3, width: 0.4, height: 0.2 });
+    machineScene.connections = [{ from: { objectId: 'first', socket: 'shouted' }, to: { objectId: 'sensor', socket: 'body' } }];
+    machineScene.inputs = [{ id: 'start', tick: 0, target: { objectId: 'first', socket: 'trigger' } }];
+    const machine = await validateMachine(machineScene, registry(version), resolvePreviewSource);
+    expect(machine.expanded[0].configured.actions.map((action) => action.type)).toContain('shout');
+  });
+  test.each([
+    ['impulse', -0.01], ['impulse', 8.01], ['range', 0.09], ['range', 2.01], ['angle', 0],
+  ])('rejects invalid shout field %s = %s', (field, value) => {
+    const content = shoutPart();
+    Reflect.set(content.actions[0], field, value);
+    expect(() => parsePart(content)).toThrow();
   });
   test('combines real Fire and Wizard abilities, while bounds constrain each action and control', async () => {
     const p = part(); p.source = previewSourcePin('846'); p.props = []; p.sockets = []; p.connections = [];

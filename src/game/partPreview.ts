@@ -70,6 +70,14 @@ export class PartPreview {
         body.applyImpulse({ x: Math.cos(a.angle) * a.impulse, y: Math.sin(a.angle) * a.impulse }, true);
         this.emit('Chog pushed a nearby physical ball. Output: pushed body.');
       }
+    } else if (a.type === 'shout') {
+      for (const { body } of this.bodies) {
+        const p = body.translation(), dx = p.x - a.x, dy = p.y - a.y, distance = Math.hypot(dx, dy);
+        if (!body.isDynamic() || distance > a.range) continue;
+        const direction = distance < 1e-6 ? { x: 0, y: 1 } : { x: dx / distance, y: dy / distance };
+        body.applyImpulse({ x: direction.x * a.impulse, y: direction.y * a.impulse }, true);
+      }
+      this.emit('Chog shouted. Nearby bodies were pushed outward. Output: shouted body.');
     }
   }
   private laser() {

@@ -23,6 +23,10 @@ export async function createPartStage(canvas: HTMLCanvasElement, version: PartVe
     const a = version.content.actions[0];
     if (a.type === 'lift') liftColumn(ctx, (a.x - a.width / 2) * scale, y(a.y + a.height / 2), a.width * scale, a.height * scale);
     if (a.type === 'portal') { portalRing(ctx, a.x * scale, y(a.y), a.radius * scale); portalRing(ctx, a.exitX * scale, y(a.exitY), a.radius * scale); }
+    if (a.type === 'shout') {
+      inkCircle(ctx, a.x * scale, y(a.y), a.range * scale, 'transparent', colour.ink, 2);
+      inkCircle(ctx, a.x * scale, y(a.y), a.range * scale * 0.68, 'transparent', colour.ink, 2);
+    }
     for (const p of version.content.props) {
       if (p.type === 'balloon' && !s.balloonPopped) inkCircle(ctx, p.x * scale, y(p.y), p.radius * scale);
       if (p.type === 'ramp') plank(ctx, p.x * scale, y(p.y), p.width * scale, p.height * scale, p.angle);

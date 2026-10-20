@@ -60,6 +60,17 @@ describe('publication API with synthetic chain and test store', () => {
     expect((await h.call(body, 'commit')).status).toBe(401);
     expect(h.store.commit).not.toHaveBeenCalled();
   });
+  test('rejects a Shout publication from a source without the Shout trait', async () => {
+    const h = await harness(), content = structuredClone(h.content);
+    content.actions = [{ id: 'laser', type: 'shout', x: 1, y: 1, impulse: 5, range: 1.5 }];
+    content.sockets = [
+      { id: 'trigger', direction: 'input', kind: 'event', target: { objectId: 'laser', socket: 'trigger' } },
+      { id: 'shouted', direction: 'output', kind: 'body', target: { objectId: 'laser', socket: 'shouted' } },
+    ];
+    content.controls = [{ id: 'impulse', objectId: 'laser', field: 'impulse', min: 0, max: 8, default: 5 }];
+    content.connections = [];
+    expect((await h.call({ content, key: h.id })).status).toBe(400);
+  });
   test('rejects non-owner, transfer after prepare, stale chain and revoked sessions', async () => {
     const h = await harness(), body = await h.sign();
     h.reader.ownerOf = async () => account().address;

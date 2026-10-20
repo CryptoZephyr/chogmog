@@ -9,6 +9,23 @@ async function play(scene: Scene, catalog: PreviewCatalog, ticks = 180) {
 }
 
 describe('free machine shared-world sandbox', () => {
+  test('scheduled Shout input pushes a nearby body and fires once', async () => {
+    const catalog = await PreviewCatalog.create(), scene = structuredClone(newMachineDraft(catalog));
+    scene.props = [{ id: 'ball', type: 'ball', x: 1.5, y: 1.5, radius: 0.18, restitution: 0.5 }];
+    scene.parts = [{ id: 'shout', versionId: catalog.get('shout').id, x: 0, y: 0, values: { impulse: 5 } }];
+    scene.connections = [];
+    scene.inputs = [
+      { id: 'scheduled-first', tick: 0, target: { objectId: 'shout', socket: 'in' } },
+      { id: 'scheduled-again', tick: 1, target: { objectId: 'shout', socket: 'in' } },
+    ];
+    const simulation = await MachinePreview.create(scene, catalog.resolvePart, resolvePreviewSource);
+    try {
+      const result = simulation.step(2);
+      expect(result.bodies[0].vx).toBeGreaterThan(0);
+      expect(result.events.filter((event) => event.text.includes('shouted a physical body'))).toHaveLength(1);
+    } finally { simulation.dispose(); }
+  });
+
   test('runs a physical cross-part chain and repeats on Reset, without a wallet', async () => {
     const catalog = await PreviewCatalog.create();
     const scene = newMachineDraft(catalog);

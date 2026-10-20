@@ -112,6 +112,10 @@
   .app .runbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; border-radius: 0; border-width: 2px 0 0; }
   .app .run, .app .btn { min-height: 48px; }
 }
+@media (max-width: 767px) and (max-height: 540px) {
+  .app { padding-bottom: var(--gutter); }
+  .app .runbar { position: static; border-radius: 4px; border-width: 2px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .app, .app .run, .app .btn { transition: none; }
   .app .run:active:not(:disabled), .app .btn:active:not(:disabled) { transform: none; }

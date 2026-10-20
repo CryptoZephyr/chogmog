@@ -2,6 +2,8 @@ import type { EventType } from '../game/chain';
 
 export const SOUND_KEY = 'chogmog.sound.v1';
 export const MAX_VOICES = 4;
+/** A cue that arrives while its clip is still decoding plays late, but only within this window. */
+export const LATE_CUE_MS = 400;
 export const SOUND_FILE: Record<EventType, string> = {
   released: 'drop', sensor: 'click', laser: 'zap', popped: 'pop', lifted: 'whoosh',
   teleported: 'bloop', 'portal-blocked': 'bonk', lever: 'clunk', banner: 'tada',
@@ -27,32 +29,43 @@ export function createSoundPlayer(enabled: boolean): SoundPlayer {
   let voices = 0;
   let files: Promise<[EventType, ArrayBuffer][]> | null = null;
   const buffers = new Map<EventType, AudioBuffer>();
+  const waiting = new Map<EventType, number>();
   const fetchFiles = () => files ??= Promise.all((Object.entries(SOUND_FILE) as [EventType, string][]).map(([type, name]) =>
     fetch(`/sounds/${name}.mp3`).then((response) => {
       if (!response.ok) throw new Error('Sound unavailable');
       return response.arrayBuffer();
     }).then((data): [EventType, ArrayBuffer] => [type, data], (): [EventType, ArrayBuffer] => [type, new ArrayBuffer(0)])));
-  if (on) void fetchFiles();
   const unlock = () => {
     if (!on || context || typeof AudioContext === 'undefined') { if (context?.state === 'suspended') void context.resume().catch(() => undefined); return; }
     const created = new AudioContext();
     context = created;
     void fetchFiles().then((entries) => Promise.all(entries.filter(([, data]) => data.byteLength > 0).map(([type, data]) =>
-      created.decodeAudioData(data).then((buffer) => { if (context === created) buffers.set(type, buffer); }, () => undefined))));
+      created.decodeAudioData(data).then((buffer) => {
+        if (context !== created) return;
+        buffers.set(type, buffer);
+        const asked = waiting.get(type);
+        waiting.delete(type);
+        if (asked !== undefined && performance.now() - asked <= LATE_CUE_MS) start(buffer);
+      }, () => undefined))));
   };
   return {
     unlock,
     play(type) {
+      if (!on || !context) return;
       const buffer = buffers.get(type);
-      if (!on || !context || !buffer || voices >= MAX_VOICES || context.state !== 'running') return;
-      const source = context.createBufferSource();
-      source.buffer = buffer;
-      source.connect(context.destination);
-      voices++;
-      source.onended = () => { voices--; source.disconnect(); };
-      source.start();
+      if (buffer) start(buffer);
+      else waiting.set(type, performance.now());
     },
-    setEnabled(next) { on = next; if (next) unlock(); },
-    dispose() { const closing = context; context = null; buffers.clear(); void closing?.close().catch(() => undefined); },
+    setEnabled(next) { on = next; if (next) unlock(); else waiting.clear(); },
+    dispose() { const closing = context; context = null; buffers.clear(); waiting.clear(); void closing?.close().catch(() => undefined); },
   };
+  function start(buffer: AudioBuffer) {
+    if (!on || !context || voices >= MAX_VOICES || context.state !== 'running') return;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    voices++;
+    source.onended = () => { voices--; source.disconnect(); };
+    source.start();
+  }
 }

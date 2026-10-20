@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSoundPlayer, loadSoundOn, MAX_VOICES, saveSoundOn, SOUND_FILE, SOUND_KEY } from '../src/ui/sound';
-import { cuesBetween } from '../src/game/stageFx';
+import { newCues } from '../src/game/stageFx';
 import type { ChainEvent } from '../src/game/chain';
 
 const event = (tick: number, type: ChainEvent['type']): ChainEvent => ({ tick, type, actor: 'a', target: 'b' });
@@ -35,9 +35,10 @@ const stubAudio = () => {
 describe('chain sounds', () => {
   it('cues each event kind once, at its first occurrence', () => {
     const events = [event(0, 'released'), event(40, 'sensor'), event(41, 'laser'), event(60, 'lifted'), event(70, 'lifted')];
-    expect(cuesBetween(events, -1, 0)).toEqual(['released']);
-    expect(cuesBetween(events, 0, 41)).toEqual(['sensor', 'laser']);
-    expect(cuesBetween(events, 60, 80)).toEqual([]);
+    const heard = new Set<ChainEvent['type']>();
+    expect(newCues(events.slice(0, 1), heard)).toEqual(['released']);
+    expect(newCues(events.slice(0, 4), heard)).toEqual(['sensor', 'laser', 'lifted']);
+    expect(newCues(events, heard)).toEqual([]);
   });
 
   it('has a file for every event kind', () => {
@@ -54,13 +55,18 @@ describe('chain sounds', () => {
     expect(loadSoundOn({ getItem: () => { throw new Error('denied'); }, setItem: () => undefined })).toBe(true);
   });
 
-  it('stays silent until unlocked by a gesture and caps simultaneous sounds', async () => {
-    stubAudio();
+  it('loads nothing until unlocked by a gesture, plays a cue that arrived while decoding, and caps simultaneous sounds', async () => {
+    const fetcher = stubAudio();
     const player = createSoundPlayer(true);
     player.play('laser');
+    expect(fetcher).not.toHaveBeenCalled();
     expect(FakeContext.made).toHaveLength(0);
     player.unlock();
+    player.play('released');
     await flush();
+    expect(FakeContext.made[0].started).toBe(1);
+    FakeContext.made[0].sources[0].onended?.();
+    FakeContext.made[0].started = 0;
     const context = FakeContext.made[0];
     for (let i = 0; i < MAX_VOICES + 2; i++) player.play('laser');
     expect(context.started).toBe(MAX_VOICES);

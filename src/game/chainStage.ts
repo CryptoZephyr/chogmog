@@ -82,7 +82,7 @@ const WORD_AT: Partial<Record<keyof typeof SOUND_WORD, (scene: ChainScene) => Po
   lifted: () => [3.4, 4.6],
   teleported: (scene) => [9.35, scene.portalExitY + 0.55],
   'portal-blocked': (scene) => [9.35, scene.portalExitY - 0.55],
-  lever: () => [10, 3.3],
+  lever: () => [10.6, 1.6],
 };
 function nozzle(g: Graphics, x: number, y: number, color: number) {
   g.circle(px(x), py(y), 6).fill(color).stroke({ color: theme.ink, width: 2 });

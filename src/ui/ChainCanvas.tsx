@@ -143,7 +143,7 @@ export function ChainCanvas() {
         <p className="status" role="status">{status}</p>
         <span className="tick" aria-hidden="true">Tick {view?.snapshot.tick ?? 0}/{MAX_TICKS}</span>
       </div>
-      {stopKey && <div className="caption-box stopped" role="status"><span className="x-stamp" aria-hidden="true">X</span>{STOPPED[stopKey]}</div>}
+      {stopKey && <div className="caption-box stopped" role="status"><span className="x-stamp" aria-hidden="true">X</span>{stopKey === 'laser' && !getPreview(scene.laserToken).kit.includes('laser') ? 'Stopped at the laser. Needs laser eyes, so try Chog #25.' : STOPPED[stopKey]}</div>}
       {coach && <div className="caption-box">{coach.text}<button className="dismiss" onClick={() => setCoachOff(true)}>Hide tips</button></div>}
       {view && Object.values(view.artwork).includes('unavailable') && <p className="alert" role="alert">Some Chog art didn't load. The machine still plays. Reload to retry.</p>}
       {!saved && <p className="alert" role="alert">Saving isn't available in this browser. This arrangement still works in this tab.</p>}

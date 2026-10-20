@@ -6,7 +6,7 @@ import { MAX_TICKS, WORLD_HEIGHT } from '../domain/fallingScene';
 import { abilityTone, fontFamily, hexToNumber, laserTone, loadFonts, pixiTheme as theme } from '../ui/tokens';
 import { ChainSimulation, GEOMETRY, type ChainSnapshot, type EventType } from './chain';
 import { FixedStepClock } from './fixedStepClock';
-import { activeWords, newCues, pathPrefix, pulseProgress, SOUND_WORD, WORD_TICKS, type Point } from './stageFx';
+import { activeWords, bobOffset, newCues, pathPrefix, pulseProgress, shakeOffset, SOUND_WORD, WORD_TICKS, wireSpent, type Point } from './stageFx';
 
 export interface ChainView {
   snapshot: ChainSnapshot;
@@ -68,10 +68,10 @@ function plug(g: Graphics, x: number, y: number) {
   g.roundRect(x + 5, y + 30, 14, 12, 2).fill(theme.white).stroke({ color: theme.ink, width: 2 });
   g.moveTo(x + 9, y + 42).lineTo(x + 9, y + 48).moveTo(x + 15, y + 42).lineTo(x + 15, y + 48).stroke({ color: theme.ink, width: 2 });
 }
-function path(g: Graphics, points: [number, number][], color: number, width: number) {
+function path(g: Graphics, points: [number, number][], color: number, width: number, alpha = 1) {
   g.moveTo(px(points[0][0]), py(points[0][1]));
   for (const [x, y] of points.slice(1)) g.lineTo(px(x), py(y));
-  g.stroke({ color, width, cap: 'round', join: 'round' });
+  g.stroke({ color, width, alpha, cap: 'round', join: 'round' });
 }
 const BANNER_TEXT = { width: 408, height: 80 };
 const WORD_AT: Partial<Record<keyof typeof SOUND_WORD, (scene: ChainScene) => Point>> = {
@@ -115,7 +115,9 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   const pulses = new Graphics();
   const words = new Container();
   const stamp = new Graphics();
-  app.stage.addChild(base, portraits, tethers, props, pulses, bodies, beam, overlay, words, stamp);
+  const shaker = new Container();
+  shaker.addChild(portraits, tethers, props, pulses, bodies, beam, overlay, words, stamp);
+  app.stage.addChild(base, shaker);
   const motion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
 
   const text = (value: string, size: number, options: { family?: string; weight?: '400' | '700'; parent?: Container; wrap?: number; align?: 'left' | 'center' | 'right' } = {}) => {
@@ -236,8 +238,13 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     const lift = { bright: hexToNumber(abilityTone.lift.bright), deep: hexToNumber(abilityTone.lift.deep) };
     const portal = { bright: hexToNumber(abilityTone.portal.bright), deep: hexToNumber(abilityTone.portal.deep) };
     const used = new Set([scene.laserToken, scene.liftToken, scene.portalToken]);
+    const still = !!motion?.matches;
+    const [shakeX, shakeY] = still ? [0, 0] : shakeOffset(snapshot.events, snapshot.tick);
+    shaker.position.set(shakeX, shakeY);
     for (const [token, view] of portraitViews) {
       view.group.visible = used.has(token);
+      const slot = PORTRAIT[token as keyof typeof PORTRAIT];
+      view.group.position.set(px(slot.x), py(slot.y + PORTRAIT_SIZE) - (still ? 0 : bobOffset(snapshot.events, token, snapshot.tick)));
       const cached = textures.get(token);
       view.sprite.visible = !!cached;
       view.missing.visible = artwork[token] === 'unavailable';
@@ -414,9 +421,9 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     fitBanner();
     banner.visible = snapshot.bannerOpen;
 
-    const still = !!motion?.matches;
     pulses.clear();
     for (const wire of wires) {
+      if (wireSpent(snapshot.events, wire.after, snapshot.tick)) { path(pulses, wire.points as [number, number][], wire.color, 6, 0.4); continue; }
       const progress = pulseProgress(snapshot.events, wire.after, snapshot.tick);
       if (progress === null) continue;
       const lit = pathPrefix(wire.points, still ? 1 : progress);

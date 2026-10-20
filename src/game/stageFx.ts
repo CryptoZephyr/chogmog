@@ -13,6 +13,8 @@ export const SOUND_WORD: Record<EventType, string> = {
 };
 export const WORD_TICKS = 36;
 export const PULSE_TICKS = 12;
+export const BOB_TICKS = 12;
+export const SHAKE_TICKS = 9;
 
 export type Point = readonly [number, number];
 
@@ -62,4 +64,32 @@ export function newCues(events: readonly ChainEvent[], heard: Set<EventType>): E
     cues.push(event.type);
   }
   return cues;
+}
+
+/** Pixels a Chog portrait rises when one of its powers first fires: up to 4px and back over BOB_TICKS. */
+export function bobOffset(events: readonly ChainEvent[], token: string, tick: number): number {
+  const seen = new Set<EventType>();
+  let lift = 0;
+  for (const event of events) {
+    if (event.sourceToken !== token || seen.has(event.type)) continue;
+    seen.add(event.type);
+    const age = tick - event.tick;
+    if (age >= 0 && age < BOB_TICKS) lift = Math.max(lift, 4 * Math.sin((Math.PI * (age + 1)) / (BOB_TICKS + 1)));
+  }
+  return lift;
+}
+
+/** Stage offset for the balloon-pop shake: a 4px decaying jitter for SHAKE_TICKS after the pop. */
+export function shakeOffset(events: readonly ChainEvent[], tick: number): Point {
+  const at = firstTick(events, 'popped');
+  const age = at === undefined ? -1 : tick - at;
+  if (age < 0 || age >= SHAKE_TICKS) return [0, 0];
+  const size = 4 * (1 - age / SHAKE_TICKS);
+  return [(age % 2 === 0 ? 1 : -1) * size, (age % 3 === 0 ? -0.5 : 0.5) * size];
+}
+
+/** Whether a wire's pulse has finished, so the wire keeps its tint until Reset. */
+export function wireSpent(events: readonly ChainEvent[], type: EventType, tick: number): boolean {
+  const at = firstTick(events, type);
+  return at !== undefined && tick - at >= PULSE_TICKS;
 }

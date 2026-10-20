@@ -1,13 +1,9 @@
 import { getPreview } from '../domain/chog';
 import type { ChainEvent, EventType } from '../game/chain';
+import { SOUND_WORD } from '../game/stageFx';
 import { abilityTone, colour, laserTone } from './tokens';
 
 export interface StripPanel { key: string; word: string; caption: string; tone: string; count: number; stopped?: boolean }
-
-const WORD: Record<EventType, string> = {
-  released: 'DROP', sensor: 'CLICK', laser: 'ZAP', popped: 'POP!', lifted: 'WHOOSH',
-  teleported: 'BLOOP', 'portal-blocked': 'BONK', lever: 'CLUNK', banner: 'TA-DA',
-};
 
 const chog = (token?: string) => (token ? `Chog #${getPreview(token).artworkNumber}` : 'A Chog');
 const laserColour = (token?: string) =>
@@ -39,7 +35,7 @@ export function comicStrip(events: readonly ChainEvent[], message: string, stopp
     if (event.type === 'portal-blocked' && counts.has('teleported')) continue;
     seen.add(event.type);
     const count = counts.get(event.type)!;
-    panels.push({ key: event.type, word: WORD[event.type], count, ...caption(event, count, message, laserToken) });
+    panels.push({ key: event.type, word: SOUND_WORD[event.type], count, ...caption(event, count, message, laserToken) });
   }
   if (stopped) panels.push({ key: 'stopped', word: 'STOP', caption: `The chain stops at the ${stopped}.`, tone: colour.ink, count: 0, stopped: true });
   return panels;

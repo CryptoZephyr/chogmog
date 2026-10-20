@@ -6,6 +6,7 @@ import { MAX_TICKS, WORLD_HEIGHT } from '../domain/fallingScene';
 import { abilityTone, fontFamily, hexToNumber, laserTone, loadFonts, pixiTheme as theme } from '../ui/tokens';
 import { ChainSimulation, GEOMETRY, type ChainSnapshot } from './chain';
 import { FixedStepClock } from './fixedStepClock';
+import { activeWords, pathPrefix, pulseProgress, SOUND_WORD, WORD_TICKS, type Point } from './stageFx';
 
 export interface ChainView {
   snapshot: ChainSnapshot;
@@ -72,6 +73,17 @@ function path(g: Graphics, points: [number, number][], color: number, width: num
   for (const [x, y] of points.slice(1)) g.lineTo(px(x), py(y));
   g.stroke({ color, width, cap: 'round', join: 'round' });
 }
+const BANNER_TEXT = { width: 408, height: 80 };
+const WORD_AT: Partial<Record<keyof typeof SOUND_WORD, (scene: ChainScene) => Point>> = {
+  released: (scene) => [scene.ballX + 0.75, 6.2],
+  sensor: () => [2, 1.9],
+  laser: () => [3.25, 3.6],
+  popped: () => [5, 3],
+  lifted: () => [3.4, 4.6],
+  teleported: (scene) => [9.35, scene.portalExitY + 0.55],
+  'portal-blocked': (scene) => [9.35, scene.portalExitY - 0.55],
+  lever: () => [10, 3.3],
+};
 function nozzle(g: Graphics, x: number, y: number, color: number) {
   g.circle(px(x), py(y), 6).fill(color).stroke({ color: theme.ink, width: 2 });
 }
@@ -100,8 +112,11 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   const bodies = new Graphics();
   const beam = new Graphics();
   const overlay = new Container();
+  const pulses = new Graphics();
+  const words = new Container();
   const stamp = new Graphics();
-  app.stage.addChild(base, portraits, tethers, props, bodies, beam, overlay, stamp);
+  app.stage.addChild(base, portraits, tethers, props, pulses, bodies, beam, overlay, words, stamp);
+  const motion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
 
   const text = (value: string, size: number, options: { family?: string; weight?: '400' | '700'; parent?: Container; wrap?: number; align?: 'left' | 'center' | 'right' } = {}) => {
     const item = new Text({ text: value, style: { fontFamily: options.family ?? fontFamily.ui, fontSize: size, fontWeight: options.weight ?? '700', fill: theme.ink,
@@ -173,6 +188,14 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   needs.portal.anchor.set(1, 0.5); needs.portal.position.set(px(4.25), py(5.8));
   const banner = text(initial.message, 36, { family: fontFamily.display, weight: '400', wrap: 408, align: 'center' });
   banner.anchor.set(0.5);
+  banner.style.breakWords = true;
+  const wordViews = new Map(Object.keys(WORD_AT).map((type) => {
+    const item = new Text({ text: SOUND_WORD[type as keyof typeof SOUND_WORD], style: { fontFamily: fontFamily.display, fontSize: 30, fill: theme.white,
+      stroke: { color: theme.ink, width: 6, join: 'round' } } });
+    item.anchor.set(0.5); item.rotation = -0.07; item.visible = false;
+    words.addChild(item);
+    return [type as keyof typeof SOUND_WORD, item];
+  }));
   banner.position.set(px(6), py(7.12));
 
   const artwork: ChainView['artwork'] = Object.fromEntries(PREVIEWS.map((p) => [p.tokenId, 'loading']));
@@ -187,12 +210,19 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   let showLabels = false;
   const publish = () => notify({ snapshot: simulation.snapshot(), running, artwork: { ...artwork }, bitmaps: Object.fromEntries([...textures].map(([token, entry]) => [token, entry.bitmap])) });
 
+  let fitted: string | null = null;
   const fitBanner = () => {
+    if (fitted === scene.message) return;
+    fitted = scene.message;
     banner.text = scene.message;
-    for (const size of [36, 32, 28, 24]) {
+    const fits = () => banner.height <= BANNER_TEXT.height && banner.width <= BANNER_TEXT.width;
+    for (const size of [36, 32, 28, 24, 20]) {
       banner.style.fontSize = size;
-      if (banner.height <= 3 * size * 1.15) break;
+      if (fits()) return;
     }
+    const kept = scene.message.trim().split(/\s+/);
+    while (kept.length > 1 && !fits()) { kept.pop(); banner.text = `${kept.join(' ')}…`; }
+    while (!fits() && banner.text.length > 2) banner.text = `${banner.text.slice(0, -2)}…`;
   };
 
   const draw = () => {
@@ -217,25 +247,34 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     }
 
     tethers.clear();
+    const wires: { points: Point[]; color: number; after: keyof typeof SOUND_WORD }[] = [
+      { points: [[g.sensor.x + g.sensor.halfWidth, g.sensor.y], [g.laser.x - 0.18, g.sensor.y], [g.laser.x - 0.18, g.laser.y]], color: theme.ink, after: 'sensor' },
+      { points: [[g.lever.x + g.lever.halfWidth + 0.1, g.lever.y], [11.3, g.lever.y], [11.3, 7.2], [8.95, 7.2]], color: theme.ink, after: 'lever' },
+    ];
     if (laserColours) {
       const from = PORTRAIT['533'];
       const deep = hexToNumber(laserColours.deep);
-      path(tethers, [[from.x + PORTRAIT_SIZE, 1.2], [g.laser.x, 1.2], [g.laser.x, 2.8]], deep, 4);
+      const points: Point[] = [[from.x + PORTRAIT_SIZE, 1.2], [g.laser.x, 1.2], [g.laser.x, 2.8]];
+      path(tethers, points as [number, number][], deep, 4);
+      wires.push({ points, color: deep, after: 'laser' });
       nozzle(tethers, g.laser.x, 2.8, deep);
     }
     if (liftOn) {
       const from = PORTRAIT[scene.liftToken as keyof typeof PORTRAIT];
       const right = g.lift.x + g.lift.halfWidth;
       path(tethers, [[from.x, 5], [right, 5]], lift.deep, 4);
+      wires.push({ points: [[from.x, 5], [right, 5]], color: lift.deep, after: 'lifted' });
       nozzle(tethers, right, 5, lift.deep);
     }
     if (portalOn) {
       const from = PORTRAIT[scene.portalToken as keyof typeof PORTRAIT];
       const r = g.entrance.radius;
-      path(tethers, [[from.x + 0.9, from.y + PORTRAIT_SIZE], [from.x + 0.9, 6.45], [g.entrance.x, 6.45], [g.entrance.x, g.entrance.y + r]], portal.deep, 4);
+      const entry: Point[] = [[from.x + 0.9, from.y + PORTRAIT_SIZE], [from.x + 0.9, 6.45], [g.entrance.x, 6.45], [g.entrance.x, g.entrance.y + r]];
+      path(tethers, entry as [number, number][], portal.deep, 4);
       const ey = scene.portalExitY, joinY = from.y + 0.7, dy = joinY - ey;
       const end: [number, number] = dy >= r ? [g.exitX, ey + r] : dy <= -r ? [g.exitX, ey - r] : [g.exitX - Math.sqrt(r * r - dy * dy), joinY];
       path(tethers, [[from.x + PORTRAIT_SIZE, joinY], [end[0], joinY], end], portal.deep, 4);
+      wires.push({ points: entry, color: portal.deep, after: 'teleported' }, { points: [[from.x + PORTRAIT_SIZE, joinY], [end[0], joinY], end], color: portal.deep, after: 'teleported' });
       nozzle(tethers, g.entrance.x, g.entrance.y + r, portal.deep);
       nozzle(tethers, end[0], end[1], portal.deep);
     }
@@ -249,7 +288,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     props.moveTo(plate.x, plate.y).lineTo(plate.x, plate.y + plate.h).lineTo(plate.x + plate.w, plate.y + plate.h).lineTo(plate.x + plate.w, plate.y).stroke({ color: theme.ink, width: 3 });
     if (flash) props.moveTo(plate.x, plate.y).lineTo(plate.x + plate.w, plate.y).stroke({ color: theme.ink, width: 3 });
     else { dashedLine(props, plate.x, plate.y, plate.x + plate.w, plate.y, 6, 5); props.stroke({ color: theme.ink, width: 3 }); }
-    path(props, [[g.sensor.x + g.sensor.halfWidth, g.sensor.y], [g.laser.x - 0.18, g.sensor.y], [g.laser.x - 0.18, g.laser.y]], theme.ink, 2);
+    path(props, wires[0].points as [number, number][], theme.ink, 2);
 
     const released = snapshot.tick > 0;
     const jawGap = released ? 0.16 : 0;
@@ -323,7 +362,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     props.poly([...corner(-lever.hw, -lever.hh), ...corner(lever.hw, -lever.hh), ...corner(lever.hw, lever.hh), ...corner(-lever.hw, lever.hh)]).fill(theme.white);
     props.poly([...corner(-lever.hw, lever.hh * 0.2), ...corner(lever.hw, lever.hh * 0.2), ...corner(lever.hw, lever.hh), ...corner(-lever.hw, lever.hh)]).fill({ color: theme.ink, alpha: 0.12 });
     props.poly([...corner(-lever.hw, -lever.hh), ...corner(lever.hw, -lever.hh), ...corner(lever.hw, lever.hh), ...corner(-lever.hw, lever.hh)]).stroke({ color: theme.ink, width: 3 });
-    path(props, [[g.lever.x + g.lever.halfWidth + 0.1, g.lever.y], [11.3, g.lever.y], [11.3, 7.2], [8.95, 7.2]], theme.ink, 2);
+    path(props, wires[1].points as [number, number][], theme.ink, 2);
 
     if (snapshot.bannerOpen) {
       props.rect(px(3.3), py(7.7), px(5.4), px(1.1)).fill(theme.white).stroke({ color: theme.ink, width: 3 });
@@ -333,12 +372,10 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     props.circle(px(3.2), py(7.85) + 7, 9).fill(theme.white).stroke({ color: theme.ink, width: 3 });
     props.circle(px(8.8), py(7.85) + 7, 9).fill(theme.white).stroke({ color: theme.ink, width: 3 });
 
-    const history = new Map<string, { lifted: boolean; portal: boolean }>();
+    const lastPower = new Map<string, typeof lift>();
     for (const event of snapshot.events) {
-      if (event.type !== 'lifted' && event.type !== 'teleported') continue;
-      const state = history.get(event.target) ?? { lifted: false, portal: false };
-      if (event.type === 'lifted') state.lifted = true; else state.portal = true;
-      history.set(event.target, state);
+      if (event.type === 'lifted') lastPower.set(event.target, lift);
+      else if (event.type === 'teleported') lastPower.set(event.target, portal);
     }
     bodies.clear();
     for (const body of snapshot.bodies) {
@@ -348,8 +385,8 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
         bodies.moveTo(x + 4, y + 12).arc(x, y, 12, Math.PI * 0.4, Math.PI * 0.02, true).stroke({ color: theme.ink, width: 4, alpha: 0.12 });
         continue;
       }
-      const state = history.get(body.id);
-      bodies.circle(x, y, 5).fill(state?.lifted ? lift.bright : theme.white).stroke({ color: state?.portal ? portal.deep : state?.lifted ? lift.deep : theme.ink, width: state?.portal ? 2.5 : 1.5 });
+      const tone = lastPower.get(body.id);
+      bodies.circle(x, y, 5).fill(tone ? tone.bright : theme.white).stroke({ color: tone ? tone.deep : theme.ink, width: tone ? 2 : 1.5 });
     }
 
     beam.clear();
@@ -364,7 +401,8 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
 
     const labelsOn = showLabels || (snapshot.tick === 0 && !running);
     for (const label of labels) {
-      label.item.visible = labelsOn && !compact && !(label.item.text === 'Laser' && !laserColours);
+      label.item.visible = labelsOn && (!compact || showLabels) && !(label.item.text === 'Laser' && !laserColours);
+      label.item.scale.set(compact ? 1.6 : 1);
       const [x, y] = label.at();
       label.item.position.set(px(x), py(y));
     }
@@ -374,6 +412,29 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     needs.portal.visible = !portalOn;
     fitBanner();
     banner.visible = snapshot.bannerOpen;
+
+    const still = !!motion?.matches;
+    pulses.clear();
+    for (const wire of wires) {
+      const progress = pulseProgress(snapshot.events, wire.after, snapshot.tick);
+      if (progress === null) continue;
+      const lit = pathPrefix(wire.points, still ? 1 : progress);
+      path(pulses, lit as [number, number][], wire.color, 6);
+      const [hx, hy] = lit[lit.length - 1];
+      pulses.circle(px(hx), py(hy), 7).fill(theme.white).stroke({ color: wire.color, width: 3 });
+    }
+    const live = new Map(activeWords(snapshot.events, snapshot.tick).map((word) => [word.type, word.age]));
+    for (const [type, item] of wordViews) {
+      const age = live.get(type);
+      item.visible = age !== undefined && !(type === 'laser' && !laserColours);
+      if (age === undefined) continue;
+      const tone = type === 'laser' && laserColours ? hexToNumber(laserColours.bright) : type === 'lifted' ? lift.bright : type === 'teleported' || type === 'portal-blocked' ? portal.bright : theme.white;
+      item.style.fill = tone;
+      const [wx, wy] = WORD_AT[type]!(scene);
+      item.position.set(px(wx), py(wy));
+      item.scale.set((compact ? 1.5 : 1) * (still || age >= 6 ? 1 : 1.3 - age * 0.05));
+      item.alpha = age > WORD_TICKS - 10 ? (WORD_TICKS - age) / 10 : 1;
+    }
 
     stamp.clear();
     if (snapshot.tick >= MAX_TICKS && !snapshot.bannerOpen) {

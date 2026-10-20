@@ -50,6 +50,15 @@ export function ChainCanvas() {
   const [coachOff, setCoachOff] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  const runbar = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const bar = runbar.current, page = bar?.closest<HTMLElement>('.app');
+    if (!bar || !page || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => page.style.setProperty('--runbar-h', `${bar.offsetHeight}px`));
+    observer.observe(bar);
+    return () => { observer.disconnect(); page.style.removeProperty('--runbar-h'); };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,8 +116,8 @@ export function ChainCanvas() {
   return <AppFrame tab="play" layout="play" wall={PLAY_WALL} onSignIn={signIn}>
     <aside className="panel tray" aria-label="Chogs in this machine">
       <h2 className="panel-title">Chogs in this machine</h2>
-      {PREVIEWS.map((source) => {
-        const powers = (['laser', 'lift', 'portal'] as const).filter((power) => source.kit.includes(power));
+      {PREVIEWS.filter((source) => (['laser', 'lift', 'portal'] as const).some((power) => scene[FIELD[power]] === source.tokenId)).map((source) => {
+        const powers = (['laser', 'lift', 'portal'] as const).filter((power) => scene[FIELD[power]] === source.tokenId && source.kit.includes(power));
         return <article className="chog-card" key={source.tokenId}>
           <span className="tape" aria-hidden="true">PREVIEW</span>
           <ArtTile bitmap={view?.bitmaps[source.tokenId]} status={view?.artwork[source.tokenId] ?? 'loading'} label={`${chogName(source)} artwork`} />
@@ -135,7 +144,7 @@ export function ChainCanvas() {
             {POWER_NAME[power]}: {source.kit.includes(power) ? `${chogName(source)}, ${trait?.trait_type} ${trait?.value}` : `${chogName(source)} has no ${POWER_TRAIT[power]}`}</li>;
         })}
       </ul>
-      <div className="panel runbar">
+      <div className="panel runbar" ref={runbar}>
         <button className="run" disabled={!canRun} onClick={run}>Run</button>
         <button className="btn" disabled={!ready || !view.running} onClick={pause}>Pause</button>
         <button className="btn" disabled={!ready} onClick={reset}>Reset</button>

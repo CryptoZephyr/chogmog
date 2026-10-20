@@ -103,12 +103,12 @@
   .app .inspector { grid-column: 1 / -1; }
 }
 @media (max-width: 767px) {
-  .app { --gutter: 8px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; padding-bottom: 88px; }
+  .app { --gutter: 8px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; padding-bottom: calc(var(--runbar-h, 88px) + var(--gutter)); }
   .app .topbar { flex-wrap: wrap; padding: 8px 12px; gap: 8px 16px; }
   .app .tabs .build-tab { display: none; }
   .app .play { order: -1; grid-row: 2; }
   .app .play { --stage-w: 100%; }
-  .app .topbar .chip-button, .app .runbar .toggle, .app .runbar .tick { display: none; }
+  .app .topbar .chip-button, .app .runbar .tick { display: none; }
   .app .runbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; border-radius: 0; border-width: 2px 0 0; }
   .app .run, .app .btn { min-height: 48px; }
 }

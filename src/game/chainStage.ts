@@ -76,7 +76,7 @@ function path(g: Graphics, points: [number, number][], color: number, width: num
 const BANNER_TEXT = { width: 408, height: 80 };
 const WORD_AT: Partial<Record<keyof typeof SOUND_WORD, (scene: ChainScene) => Point>> = {
   released: (scene) => [scene.ballX + 0.75, 6.2],
-  sensor: () => [2, 1.9],
+  sensor: () => [3.3, 2.2],
   laser: () => [3.25, 3.6],
   popped: () => [5, 3],
   lifted: () => [3.4, 4.6],

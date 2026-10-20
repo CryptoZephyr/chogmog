@@ -103,7 +103,7 @@ export function PartAuthor({ address }: { address: string | null }) {
     } finally { if (mounted.current && cycle === sequence.current) setBusy(false); }
   };
   return <section aria-label="Holder part authoring">
-    <h3>Build a reusable Chog part, development editor</h3>
+    <h3>Make a part from your Chog</h3>
     <p>Free local testing does not prove ownership. Sign in above and load a token you own to request publication. Hosted publication needs the dedicated shared backend, and is unavailable on local Vite. No transaction, payment, NFT approval or custody is involved.</p>
     <p role="status">{status}</p>
     <fieldset disabled={busy || running}>

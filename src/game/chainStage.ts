@@ -143,13 +143,15 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     const tab = chip(shortName(source), fontFamily.mono, group);
     tab.position.set(-4, -16);
     let offset = size + 6;
+    const chips: Container[] = [];
     for (const trait of powerTraits(source)) {
       const item = chip(trait, fontFamily.ui, group);
       item.position.set(0, offset);
+      chips.push(item);
       offset += 32;
     }
     portraits.addChild(group);
-    return [source.tokenId, { group, sprite, missing }];
+    return [source.tokenId, { group, sprite, missing, tab, chips }];
   }));
 
   const labels = [
@@ -195,6 +197,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
 
   const draw = () => {
     const snapshot = simulation.snapshot();
+    const compact = host.clientWidth > 0 && host.clientWidth < 560;
     const laserSource = getPreview(scene.laserToken);
     const laserColours = laserSource.kit.includes('laser') ? laserTone(eyes(laserSource)) : null;
     const liftOn = getPreview(scene.liftToken).kit.includes('lift');
@@ -207,6 +210,9 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
       const cached = textures.get(token);
       view.sprite.visible = !!cached;
       view.missing.visible = artwork[token] === 'unavailable';
+      view.tab.scale.set(compact ? 1.8 : 1);
+      view.tab.position.set(-4, compact ? -30 : -16);
+      for (const item of view.chips) item.visible = !compact;
       if (cached) { view.sprite.texture = cached.texture; view.sprite.width = px(PORTRAIT_SIZE); view.sprite.height = px(PORTRAIT_SIZE); }
     }
 
@@ -358,10 +364,11 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
 
     const labelsOn = showLabels || (snapshot.tick === 0 && !running);
     for (const label of labels) {
-      label.item.visible = labelsOn && !(label.item.text === 'Laser' && !laserColours);
+      label.item.visible = labelsOn && !compact && !(label.item.text === 'Laser' && !laserColours);
       const [x, y] = label.at();
       label.item.position.set(px(x), py(y));
     }
+    for (const item of Object.values(needs)) item.scale.set(compact ? 1.5 : 1);
     needs.laser.visible = !laserColours;
     needs.lift.visible = !liftOn;
     needs.portal.visible = !portalOn;
@@ -382,7 +389,9 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
     running = false; clock.reset(); app.stop(); render(); publish();
   };
   const visibility = () => { if (document.hidden) pause(); };
+  const resize = () => { if (!running && !disposed) render(); };
   document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('resize', resize);
   app.ticker.add((ticker) => {
     if (!running || disposed) return;
     const snapshot = simulation.step(clock.consume(ticker.elapsedMS / 1000));
@@ -411,6 +420,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
       if (disposed) return;
       disposed = true;
       document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('resize', resize);
       app.stop(); app.destroy(true, { children: true });
       for (const { texture, bitmap } of textures.values()) { texture.destroy(true); bitmap.close(); }
       simulation.dispose();

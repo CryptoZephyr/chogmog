@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_CHAIN, loadChain, saveChain, type ChainScene } from '../domain/chainScene';
 import { getPreview, PREVIEWS, provenance, type Preview } from '../domain/chog';
 import { MAX_TICKS } from '../domain/fallingScene';
 import type { ChainStage, ChainView, StopPoint } from '../game/chainStage';
-import { abilityTone, applyCssVariables, colour, laserTone, wallFor } from './tokens';
+import { abilityTone, colour, laserTone, wallFor } from './tokens';
+import { AppFrame } from './AppFrame';
 import { WalletPanel } from './WalletPanel';
 
 type Power = 'laser' | 'lift' | 'portal';
@@ -35,7 +36,6 @@ function ArtTile({ bitmap, status, label }: { bitmap?: ImageBitmap; status: stri
 }
 
 export function ChainCanvas() {
-  const root = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<ChainStage | null>(null);
   const [scene, setScene] = useState(loadChain);
@@ -51,7 +51,6 @@ export function ChainCanvas() {
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
 
   useEffect(() => {
-    if (root.current) applyCssVariables(root.current);
     const controller = new AbortController();
     let instance: ChainStage | undefined;
     void import('../game/chainStage').then(({ createChainStage }) => createChainStage(host.current!, initial.current, controller.signal, (next) => {
@@ -101,18 +100,8 @@ export function ChainCanvas() {
   const status = error ? 'Physics or WebGL failed to start. Reload in a supported browser.' : !ready ? 'Loading physics and renderer' : view.running ? 'Watch it go' : complete ? 'Run complete. Reset to run again.' : view.snapshot.tick > 0 ? 'Paused' : 'Ready';
   const highlight = (field: string) => (coach?.field === field ? { outline: `3px solid ${colour.blush}`, outlineOffset: 4, borderRadius: 4 } : undefined);
 
-  return <div className="app" ref={root} style={{ '--wall': PLAY_WALL } as CSSProperties}>
-    <header className="panel topbar">
-      <a className="wordmark" href="./" aria-label="chogmog, home">ch<span className="cheek">o</span>gm<span className="cheek">o</span>g</a>
-      <nav className="tabs" aria-label="Main">
-        <a href="./" aria-current="page">Play</a>
-        <a className="build-tab" href="?harness=machine">Build</a>
-        <a href="?harness=gallery">Gallery</a>
-      </nav>
-      <span className="spacer" />
-      <button className="chip-button" onClick={() => { setWalletOpen(true); requestAnimationFrame(() => document.getElementById('sign-in')?.scrollIntoView({ block: 'nearest' })); }}>Sign in (no transaction)</button>
-    </header>
-
+  const signIn = () => { setWalletOpen(true); requestAnimationFrame(() => document.getElementById('sign-in')?.scrollIntoView({ block: 'nearest' })); };
+  return <AppFrame tab="play" layout="play" wall={PLAY_WALL} onSignIn={signIn}>
     <aside className="panel tray" aria-label="Chogs in this machine">
       <h2 className="panel-title">Chogs in this machine</h2>
       {PREVIEWS.map((source) => {
@@ -135,6 +124,14 @@ export function ChainCanvas() {
 
     <section className="play" aria-label="Play">
       <div className="panel stage-panel"><div className="canvas-host" ref={host} /></div>
+      <ul className="panel stage-legend mobile-only" aria-label="Which Chog powers what">
+        {(['laser', 'lift', 'portal'] as const).map((power) => {
+          const source = getPreview(scene[FIELD[power]]);
+          const trait = source.metadata.attributes.find((t) => (power === 'lift' ? t.trait_type === 'Aura' : power === 'portal' ? t.trait_type === 'Head' : t.trait_type === 'Eyes'));
+          return <li key={power}><span className="swatch" style={{ background: source.kit.includes(power) ? toneFor(power, source) : colour.panel }} />
+            {POWER_NAME[power]}: {source.kit.includes(power) ? `${chogName(source)}, ${trait?.trait_type} ${trait?.value}` : `${chogName(source)} has no ${POWER_TRAIT[power]}`}</li>;
+        })}
+      </ul>
       <div className="panel runbar">
         <button className="run" disabled={!canRun} onClick={run}>Run</button>
         <button className="btn" disabled={!ready || !view.running} onClick={pause}>Pause</button>
@@ -203,5 +200,5 @@ export function ChainCanvas() {
         <p><a href="?harness=falling">Open the T0 falling-body harness</a></p>
       </details>
     </aside>
-  </div>;
+  </AppFrame>;
 }

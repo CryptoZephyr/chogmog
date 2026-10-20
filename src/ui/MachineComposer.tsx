@@ -9,6 +9,7 @@ import { api } from './walletClient';
 import { WalletPanel } from './WalletPanel';
 import { MachinePublication } from './MachinePublication';
 import { WorkDiscovery } from './WorkDiscovery';
+import { AppFrame } from './AppFrame';
 
 const storage = {
   getItem: (key: string) => window.localStorage.getItem(key),
@@ -120,13 +121,12 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
   const currentInput = timed.find((port) => port.key === inputTarget);
   const exactConnection = (connection: Connection) => `${connection.from.objectId}.${connection.from.socket} → ${connection.to.objectId}.${connection.to.socket}`;
 
-  return <main>
-    <h1>Chogmog</h1>
-    <p>Make mischief move.</p>
-    <h2>{publishedMode ? 'Published-part machine development harness' : 'Free machine composition development harness'}</h2>
-    <p>{publishedMode ? 'Loading, composing and replaying exact published parts needs no wallet or NFT. Publication requires optional sign-in, never NFT ownership. Parts only appear after genuine holder publication. Local Vite cannot load published parts.' : 'No wallet is needed. These pinned parts come from authentic public Genesis snapshots. They are unverified previews, not holder-authored publications or a genuine part catalogue. Machine publication remains unavailable in preview mode.'} This neutral editor is not the final product design.</p>
-    <p><a href="?harness=gallery">Machine gallery</a> · <a href="?harness=library">Part library</a> · <a href="?harness=chain">First-chain preview</a> · <a href="?harness=falling">Original physics harness</a></p>
-    <p><a href={publishedMode ? '?harness=machine' : '?harness=published'}>{publishedMode ? 'Open the wallet-free public-preview builder' : 'Open the published-part builder'}</a>{publishedMode && <> · <a href="?harness=published">Return to your last published-part draft</a></>}</p>
+  return <AppFrame tab="build" layout="workspace">
+    <section className="panel ws-main" aria-label="Machine">
+    <h1 className="screen-title">{publishedMode ? 'Build with published parts' : 'Build a machine'}</h1>
+    <p className="fineprint">{publishedMode ? 'Loading, composing and replaying exact published parts needs no wallet or NFT. Publication requires optional sign-in, never NFT ownership. Parts only appear after genuine holder publication. Local Vite cannot load published parts.' : 'No wallet is needed. These pinned parts come from authentic public Genesis snapshots. They are unverified previews, not holder-authored publications or a genuine part catalogue. Machine publication remains unavailable in preview mode.'}</p>
+    <p className="fineprint"><a href="?harness=library">Part library</a> · <a href="?harness=falling">Physics test bench</a> · <a href={publishedMode ? '?harness=machine' : '?harness=published'}>{publishedMode ? 'Open the wallet-free public-preview builder' : 'Open the published-part builder'}</a>{publishedMode && <> · <a href="?harness=published">Return to your last published-part draft</a></>}</p>
+    <div className="caption-box mobile-only">Building needs a bigger screen. You can still run and watch here.</div>
     {!machine || !catalog ? <p role="status">{error || 'Loading pinned preview parts and local draft…'}</p> : <>
       {!recovered && <p role="alert">The previous local draft or its exact sources could not be read or trusted. A fresh draft was opened without overwriting the saved one. No holder authority was restored.</p>}
       {!saved && <p role="alert">Local saving is unavailable. This draft still works in this tab, but a reload may lose your edits.</p>}
@@ -138,6 +138,9 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
         if (window.confirm('Create a remix and replace your saved local published-part draft? The original publication stays unchanged.')) void edit(() => {});
       }}>Remix as a new local draft</button>}
       <MachineSandbox key={machine.id} machine={machine} catalog={catalog} onRunning={onRunning} editing={busy} />
+    </>}
+    </section>
+    {machine && catalog && <div className="ws-side">
       <fieldset disabled={running}>
         <legend>Machine draft, edits rebuild and reset the run</legend>
         <label>Machine ID
@@ -183,7 +186,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
           const entry = machine.expanded.find((item) => item.instanceId === part.id)!;
           const bounds = entry.configured.bounds;
           return <fieldset key={part.id}>
-            <legend>{part.id}: {entry.configured.actions[0].type}, token {entry.version.content.source.nft.tokenId}, {catalog.isPublished(part.versionId) ? 'holder-published immutable version' : 'unverified public-data preview'}</legend>
+            <legend>{!catalog.isPublished(part.versionId) && <span className="tape-inline">PREVIEW</span>}{part.id}: {entry.configured.actions[0].type}, token {entry.version.content.source.nft.tokenId}, {catalog.isPublished(part.versionId) ? 'holder-published immutable version' : 'unverified public-data preview'}</legend>
             {(['x', 'y'] as const).map((axis) => <label key={axis}>{axis.toUpperCase()} position {part[axis].toFixed(2)}
               <input type="range" min="0" max={axis === 'x' ? WORLD_WIDTH - bounds.width : WORLD_HEIGHT - bounds.height} step="0.25"
                 value={part[axis]} onChange={(e) => void edit((s) => { s.parts.find((p) => p.id === part.id)![axis] = Number(e.target.value); })} />
@@ -275,6 +278,6 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
       {publishedMode ? <WalletPanel ownerTools={false}>{(address) =>
         <MachinePublication key={`${machine.id}:${address}:${running}:${busy}`} machine={machine} library={catalog} address={address} disabled={running || busy} />
       }</WalletPanel> : <p>Drafts stay in this browser. There is no wallet or publication action in this public preview.</p>}
-    </>}
-  </main>;
+    </div>}
+  </AppFrame>;
 }

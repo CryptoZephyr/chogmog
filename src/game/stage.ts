@@ -2,6 +2,7 @@ import { Application, Graphics } from 'pixi.js';
 import { BALL_RADIUS, FLOOR_HEIGHT, MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH, type FallingScene } from '../domain/fallingScene';
 import { FixedStepClock } from './fixedStepClock';
 import { FallingSimulation, type PhysicsSnapshot } from './physics';
+import { pixiTheme as theme } from '../ui/tokens';
 
 export interface StageView { snapshot: PhysicsSnapshot; running: boolean }
 export interface Stage {
@@ -25,7 +26,7 @@ export async function createStage(
   const app = new Application();
   try {
     await app.init({
-      width: 960, height: 640, background: 0xffffff,
+      width: 960, height: 640, background: theme.stage,
       antialias: true, autoStart: false, preference: 'webgl',
       resolution: Math.min(globalThis.devicePixelRatio || 1, 2), autoDensity: true,
     });
@@ -41,8 +42,9 @@ export async function createStage(
   }
 
   const scale = 960 / WORLD_WIDTH;
-  const floor = new Graphics().rect(0, (WORLD_HEIGHT - FLOOR_HEIGHT) * scale, 960, FLOOR_HEIGHT * scale).fill(0x999999);
-  const ball = new Graphics().circle(0, 0, BALL_RADIUS * scale).fill(0x333333);
+  const floor = new Graphics().rect(0, (WORLD_HEIGHT - FLOOR_HEIGHT) * scale, 960, FLOOR_HEIGHT * scale).fill(theme.stageGrid)
+    .moveTo(0, (WORLD_HEIGHT - FLOOR_HEIGHT) * scale).lineTo(960, (WORLD_HEIGHT - FLOOR_HEIGHT) * scale).stroke({ color: theme.ink, width: 3 });
+  const ball = new Graphics().circle(0, 0, BALL_RADIUS * scale).fill(theme.white).stroke({ color: theme.ink, width: 3 });
   app.stage.addChild(floor, ball);
   app.canvas.setAttribute('role', 'img');
   app.canvas.setAttribute('aria-label', 'Debug physics scene: a ball above a fixed floor');

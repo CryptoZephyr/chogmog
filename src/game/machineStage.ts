@@ -3,6 +3,8 @@ import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from '../domain/fallingScene';
 import type { DraftCatalog } from '../domain/machineDraft';
 import { FixedStepClock } from './fixedStepClock';
 import { MachinePreview, type MachineSnapshot } from './machinePreview';
+import { colour, loadFonts } from '../ui/tokens';
+import { beam, board, displayFont, inkCircle, laserFor, liftColumn, plank, plate, portalRing, tag, uiFont } from './canvasArt';
 
 export interface MachineStage {
   run(): void; pause(): void; reset(): void; dispose(): void;
@@ -10,51 +12,41 @@ export interface MachineStage {
 
 export async function createMachineStage(canvas: HTMLCanvasElement, scene: Scene, catalog: DraftCatalog, signal: AbortSignal,
   notify: (snapshot: MachineSnapshot, running: boolean) => void): Promise<MachineStage> {
-  const simulation = await MachinePreview.create(scene, catalog.resolvePart, catalog.resolveSource);
+  const [simulation] = await Promise.all([MachinePreview.create(scene, catalog.resolvePart, catalog.resolveSource), loadFonts()]);
   if (signal.aborted) { simulation.dispose(); throw new DOMException('Cancelled', 'AbortError'); }
   const ctx = canvas.getContext('2d');
   if (!ctx) { simulation.dispose(); throw new Error('Canvas unavailable'); }
   const clock = new FixedStepClock();
   let running = false, disposed = false, frame = 0, previous = 0;
   const scale = canvas.width / WORLD_WIDTH, y = (n: number) => (WORLD_HEIGHT - n) * scale;
-  const circle = (x: number, valueY: number, radius: number, color: string) => {
-    ctx.beginPath(); ctx.arc(x * scale, y(valueY), radius * scale, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-  };
+  const unit = scale;
+  const laserTones = new Map(simulation.machine.expanded.map((p) => [p.instanceId, laserFor(p.version.content.source.nft.tokenId)]));
+  const laserTone = [...laserTones.values()][0] ?? laserFor(undefined);
   const draw = (snapshot: MachineSnapshot) => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#aaa'; ctx.fillRect(0, y(0.2), canvas.width, 12);
+    board(ctx, canvas.width, canvas.height, unit, y(0.2));
     for (const part of scene.parts) {
       const content = simulation.machine.expanded.find((p) => p.instanceId === part.id)!.configured;
-      ctx.strokeStyle = '#888';
+      ctx.setLineDash([6, 5]); ctx.strokeStyle = colour.line; ctx.lineWidth = 2;
       ctx.strokeRect(part.x * scale, y(part.y + content.bounds.height), content.bounds.width * scale, content.bounds.height * scale);
-      ctx.fillStyle = '#222'; ctx.font = '11px system-ui';
-      ctx.fillText(`${part.id}: ${content.actions.map((a) => a.type).join(', ')}`, part.x * scale + 3, y(part.y + content.bounds.height) + 13);
+      ctx.setLineDash([]);
+      tag(ctx, `${part.id}: ${content.actions.map((a) => a.type).join(', ')}`, part.x * scale + 4, y(part.y + content.bounds.height) + 4, 13);
     }
     for (const node of simulation.nodes.values()) {
-      if (node.type === 'balloon' && !snapshot.popped.includes(node.id)) circle(node.x, node.y, node.radius, '#888');
-      if (node.type === 'ramp') {
-        ctx.save(); ctx.translate(node.x * scale, y(node.y)); ctx.rotate(-node.angle);
-        ctx.fillStyle = '#777'; ctx.fillRect(-node.width * scale / 2, -node.height * scale / 2, node.width * scale, node.height * scale); ctx.restore();
-      }
-      if (node.type === 'sensor' || node.type === 'lever') {
-        ctx.strokeStyle = node.type === 'sensor' ? '#555' : '#777';
-        ctx.strokeRect((node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
-      }
-      if (node.type === 'lift') {
-        ctx.strokeStyle = '#777';
-        ctx.strokeRect((node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
-      }
-      if (node.type === 'portal') { circle(node.x, node.y, node.radius, '#aaa'); circle(node.exitX, node.exitY, node.radius, '#aaa'); }
+      if (node.type === 'lift') liftColumn(ctx, (node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
+      if (node.type === 'portal') { portalRing(ctx, node.x * scale, y(node.y), node.radius * scale); portalRing(ctx, node.exitX * scale, y(node.exitY), node.radius * scale); }
+      if (node.type === 'ramp') plank(ctx, node.x * scale, y(node.y), node.width * scale, node.height * scale, node.angle);
+      if (node.type === 'sensor') plate(ctx, (node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
+      if (node.type === 'lever') plank(ctx, node.x * scale, y(node.y), node.width * scale, node.height * scale, snapshot.bannerOpen ? 0.26 : -0.26);
+      if (node.type === 'balloon' && !snapshot.popped.includes(node.id)) inkCircle(ctx, node.x * scale, y(node.y), node.radius * scale);
       if (node.type === 'banner') {
-        ctx.fillStyle = '#444'; ctx.font = '13px system-ui';
-        ctx.fillText(snapshot.bannerOpen ? scene.message : 'Message closed', node.x * scale - 65, y(node.y));
+        ctx.fillStyle = colour.ink; ctx.textAlign = 'center';
+        ctx.font = snapshot.bannerOpen ? displayFont(26) : uiFont(13);
+        ctx.fillText(snapshot.bannerOpen ? scene.message : 'Message closed', node.x * scale, y(node.y));
+        ctx.textAlign = 'start';
       }
     }
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
-    for (const ray of snapshot.rays.filter((ray) => snapshot.tick - ray.tick < 50)) {
-      ctx.beginPath(); ctx.moveTo(ray.x * scale, y(ray.y)); ctx.lineTo(ray.toX * scale, y(ray.toY)); ctx.stroke();
-    }
-    for (const body of snapshot.bodies) circle(body.x, body.y, body.radius, '#222');
+    for (const ray of snapshot.rays.filter((ray) => snapshot.tick - ray.tick < 50)) beam(ctx, ray.x * scale, y(ray.y), ray.toX * scale, y(ray.toY), laserTone.bright);
+    for (const body of snapshot.bodies) inkCircle(ctx, body.x * scale, y(body.y), body.radius * scale, '#FFFFFF', colour.ink, body.radius > 0.1 ? 3 : 1.5);
   };
   const publish = () => { const snapshot = simulation.snapshot(); draw(snapshot); notify(snapshot, running); };
   const pause = () => { if (disposed) return; running = false; cancelAnimationFrame(frame); clock.reset(); publish(); };

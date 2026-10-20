@@ -110,3 +110,47 @@
   .app, .app .run, .app .btn { transition: none; }
   .app .run:active:not(:disabled), .app .btn:active:not(:disabled) { transform: none; }
 }
+
+/* Shared screens: build workspace, gallery and test bench. */
+.app.workspace { grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); align-items: start; }
+.app.single { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.app .ws-main { padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; position: sticky; top: var(--gutter); }
+.app .ws-side { display: flex; flex-direction: column; gap: var(--gutter); min-width: 0; }
+.app .single-panel { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1100px; width: 100%; margin: 0 auto; }
+.app .screen-title { font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.app h2 { font-size: 18px; font-weight: 700; line-height: 1.25; }
+.app h3, .app h4 { font-size: 16px; font-weight: 700; margin: 0; }
+.app section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.app p { font-size: 15px; }
+.app a { color: var(--ink); text-underline-offset: 3px; }
+.app code, .app pre { font-family: var(--font-mono); font-size: 13px; }
+.app pre { background: var(--stage); border: 2px solid var(--line); border-radius: 4px; padding: 8px; max-height: 260px; overflow: auto; margin: 0; }
+.app button:not(.run):not(.chip-button):not(.dismiss) { font: inherit; font-weight: 700; font-size: 14px; min-height: 44px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 10px; background: var(--panel); color: var(--ink); cursor: pointer; transform-origin: bottom; transition: transform 140ms var(--ease); align-self: flex-start; }
+.app button:not(.run):not(.chip-button):not(.dismiss):active:not(:disabled) { transform: scaleY(0.92); transition-duration: 60ms; }
+.app .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.app [role="alert"] { font-size: 14px; border: 2px solid var(--error); border-radius: 4px; padding: 6px 10px; background: var(--panel); }
+.app label:not(.field):not(.toggle) { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700; margin: 0; }
+.app label:has(> input[type="checkbox"]) { flex-direction: row; align-items: flex-start; gap: 8px; font-weight: 400; }
+.app input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--ink); flex: none; margin: 1px 0 0; }
+.app form { display: flex; flex-direction: column; gap: 10px; }
+.app .ws-side > fieldset, .app .ws-side > section, .app .ws-side > details, .app .ws-side > p { background: var(--panel); border: 2px solid var(--ink); border-radius: 4px; padding: 14px; }
+.app .ws-side fieldset fieldset { border: 2px solid var(--line); border-radius: 4px; padding: 12px; }
+.app legend { font-size: 14px; font-weight: 700; padding: 0 4px; }
+.app .ws-side ul, .app .single-panel ul { padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.app .machine-canvas, .app .part-canvas { display: block; width: 100%; max-width: 100%; height: auto; border: 2px solid var(--ink); border-radius: 4px; background: var(--stage); }
+.app .tape-inline { display: inline-block; background: var(--tape); color: var(--ink); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; padding: 0 8px; margin-right: 6px; transform: rotate(-2deg); }
+.app ul.cards { list-style: none; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.app ul.cards > li { border: 2px solid var(--ink); border-radius: 4px; padding: 12px; background: var(--panel); display: flex; flex-direction: column; gap: 8px; }
+.app .empty-title { font-family: var(--font-display); font-size: 28px; line-height: 1.1; }
+.app .mobile-only { display: none; }
+.app .stage-legend { list-style: none; margin: 0; padding: 10px 12px; flex-direction: column; gap: 4px; font-size: 14px; }
+.app .stage-legend li { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 1023px) {
+  .app.workspace { grid-template-columns: minmax(0, 1fr); }
+  .app .ws-main { position: static; }
+}
+@media (max-width: 767px) {
+  .app .mobile-only { display: flex; }
+  .app.workspace .ws-side { display: none; }
+  .app .single-panel { padding: 14px; }
+}

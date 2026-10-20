@@ -24,6 +24,8 @@ export class MachineLibrary {
   }
   get(kind: PreviewAction) { return this.previews.get(kind); }
   isPublished(id: string) { return this.parts.has(id); }
+  addLocalPreviewPart(value: unknown) { return this.previews.addLocalPreviewPart(value); }
+  get previewParts() { return this.previews.previewParts; }
   get published(): readonly PartVersion[] { return [...this.parts.values()]; }
   readonly resolveSource: SourceResolver = async (pin) => this.sources.get(canonicalJson(pin)) ?? resolvePreviewSource(pin);
   readonly resolvePart: PartResolver = async (id) => {
@@ -32,7 +34,7 @@ export class MachineLibrary {
     if (this.mode === 'preview') return this.previews.resolvePart(id);
     throw new Error('Holder-published part required.');
   };
-  private isPreview(id: string) { return [...this.previews.entries.values()].some((part) => part.id === id); }
+  private isPreview(id: string) { return this.previews.isPreview(id); }
   loadPart(id: string): Promise<PartVersion> {
     if (!versionId(id)) return Promise.reject(new Error('Enter an exact sha256 version ID.'));
     if (this.isPreview(id)) return Promise.reject(new Error('Preview parts are not holder-published versions.'));

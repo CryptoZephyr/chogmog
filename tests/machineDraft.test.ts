@@ -1,18 +1,41 @@
 import { describe, expect, test } from 'vitest';
-import { PreviewCatalog, loadMachineDraft, MACHINE_DRAFT_KEY, newMachineDraft, saveMachineDraft } from '../src/domain/machineDraft';
-import { previewSourcePin, resolvePreviewSource, validateMachine, type Scene } from '../src/domain/documents';
+import { addPreviewPartToDraft, PreviewCatalog, loadMachineDraft, loadPreviewParts, MACHINE_DRAFT_KEY, newMachineDraft, parsePreviewParts,
+  PREVIEW_PARTS_KEY, PREVIEW_PART_LIMIT, saveMachineDraft, savePreviewPart } from '../src/domain/machineDraft';
+import { createPartVersion, previewSourcePin, resolvePreviewSource, validateMachine, type PartContent, type PartVersion, type Scene } from '../src/domain/documents';
+import { contentId } from '../src/domain/canonical';
+import { MachineLibrary } from '../src/domain/machineLibrary';
+import { PART_DRAFT_KEY } from '../src/domain/partAuthoring';
 
 const edit = (scene: Scene): Scene => structuredClone(scene);
 
 describe('free machine composition', () => {
   test('pins exact public-data sources and a useful preview chain without holder authority', async () => {
     const catalog = await PreviewCatalog.create();
-    for (const [kind, token] of [['release', '533'], ['laser', '533'], ['push', '533'], ['lift', '846'], ['portal', '846']] as const) {
+    const originalIds = {
+      release: 'sha256:fdba40577d211809a17f5b4b25b923e5b7d3bd9e55a03cc41dfbfd441b4f658a',
+      laser: 'sha256:2849a67dd3f580e12c61e98efed7ab607b344c25084494b1cb65cab3b9c98d3c',
+      push: 'sha256:babf3f238f471bfa4453672af78f3997d4e99e99a15576273f9c39970dfd52f6',
+      lift: 'sha256:13eef37356943f1ce598eaf2f568f71816316be18a15a4875f63d779e5ba130f',
+      portal: 'sha256:7bcc4fe70ce0e8c7aebb8865052790089c0409d1d2ca510819ef5a755aa2e4ce',
+    };
+    for (const [kind, token] of [['release', '533'], ['laser', '533'], ['push', '533'], ['lift', '846'], ['portal', '846'], ['shout', '846']] as const) {
       const version = catalog.get(kind);
       expect(version.content.source).toEqual(previewSourcePin(token));
       expect(version.content.actions[0].type).toBe(kind);
       expect((await catalog.resolvePart(version.id)).origin).toBe('public-data-preview');
+      if (kind in originalIds) expect(version.id).toBe(originalIds[kind as keyof typeof originalIds]);
     }
+    expect(catalog.get('shout').content).toMatchObject({
+      partId: 'public-preview-shout',
+      source: previewSourcePin('846'),
+      actions: [{ id: 'chog', type: 'shout', x: 1, y: 1, impulse: 5, range: 1.5 }],
+      sockets: [
+        { id: 'in', direction: 'input', kind: 'event', target: { objectId: 'chog', socket: 'trigger' } },
+        { id: 'out', direction: 'output', kind: 'body', target: { objectId: 'chog', socket: 'shouted' } },
+      ],
+      controls: [{ id: 'impulse', objectId: 'chog', field: 'impulse', min: 0, max: 8, default: 5 }],
+      props: [],
+    });
     const machine = await catalog.validate(newMachineDraft(catalog));
     expect(machine.scene.parts).toHaveLength(2);
     expect(machine.expanded.map((p) => p.configured.actions[0].type)).toEqual(['laser', 'release']);
@@ -77,5 +100,75 @@ describe('free machine composition', () => {
     const bad = { getItem: () => JSON.stringify(forged) };
     expect((await loadMachineDraft(bad, catalog)).recovered).toBe(false);
     expect((await loadMachineDraft({ getItem: () => ' '.repeat(100_000) }, catalog)).recovered).toBe(false);
+  });
+
+  test('stores only admissible preview parts, keeps six newest, and leaves authoring settings untouched', async () => {
+    const catalog = await PreviewCatalog.create(), base = catalog.get('shout');
+    const data = new Map<string, string>();
+    const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
+    expect(await savePreviewPart(storage, base)).toBe(true);
+    expect(await loadPreviewParts(storage)).toEqual([base]);
+    expect(data.has(PART_DRAFT_KEY)).toBe(false);
+
+    const altered = async (change: (content: PartContent) => void): Promise<PartVersion> => {
+      const content = structuredClone(base.content);
+      change(content);
+      return { id: await contentId(content), content };
+    };
+    const badId = { ...base, id: `sha256:${'0'.repeat(64)}` };
+    const wrongAuthor = await altered((content) => { content.author = '0x0000000000000000000000000000000000000002'; });
+    const wrongPin = await altered((content) => { content.source.observedAt = '2025-01-01T00:00:00.000Z'; });
+    const wrongKit = await altered((content) => { content.source = previewSourcePin('533'); });
+    expect(await parsePreviewParts([badId, wrongAuthor, wrongPin, wrongKit])).toEqual([]);
+
+    const versions = await Promise.all(Array.from({ length: PREVIEW_PART_LIMIT + 1 }, async (_, index) =>
+      createPartVersion({ ...base.content, partId: `local-shout-${index}` }, resolvePreviewSource)));
+    for (const version of versions) expect(await savePreviewPart(storage, version)).toBe(true);
+    const saved = await loadPreviewParts(storage);
+    expect(saved).toHaveLength(PREVIEW_PART_LIMIT);
+    expect(saved.map((version) => version.id)).toEqual(versions.slice(1).map((version) => version.id));
+    expect(data.has(PART_DRAFT_KEY)).toBe(false);
+    expect(data.has(PREVIEW_PARTS_KEY)).toBe(true);
+
+    const loaded = await catalog.addLocalPreviewPart(saved[0]);
+    expect(await catalog.resolvePart(loaded.id)).toMatchObject({ version: loaded, origin: 'public-data-preview' });
+    const machine = structuredClone(newMachineDraft(catalog));
+    machine.parts.push({ id: 'local-preview', versionId: loaded.id, x: 6, y: 0, values: {} });
+    await expect(catalog.validate(machine, 'publication')).rejects.toThrow(/Preview parts/);
+  });
+
+  test('published library rejects local preview IDs before lookup and never resolves them locally', async () => {
+    const preview = await PreviewCatalog.create(), part = preview.get('shout');
+    let lookups = 0;
+    const lookup = async () => { lookups++; throw new Error('Unexpected backend lookup'); };
+    const localLibrary = await MachineLibrary.create(lookup, 'preview');
+    await localLibrary.addLocalPreviewPart(part);
+    expect((await localLibrary.resolvePart(part.id)).origin).toBe('public-data-preview');
+    const published = await MachineLibrary.create(lookup, 'published');
+    await published.addLocalPreviewPart(part);
+    await expect(published.loadPart(part.id)).rejects.toThrow(/Preview parts/);
+    await expect(published.resolvePart(part.id)).rejects.toThrow(/Holder-published/);
+    expect(lookups).toBe(0);
+  });
+
+  test('adds a local preview part at a free spot and leaves a full Build draft unchanged', async () => {
+    const catalog = await PreviewCatalog.create(), data = new Map<string, string>();
+    const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
+    const added = await addPreviewPartToDraft(storage, catalog, catalog.get('shout'));
+    expect(added.ok).toBe(true);
+    const saved = await loadMachineDraft(storage, catalog);
+    expect(saved.machine.scene.parts).toHaveLength(3);
+    expect(saved.machine.scene.parts.find((part) => part.versionId === catalog.get('shout').id)).toMatchObject({ x: 0, y: 0 });
+
+    const full = structuredClone(newMachineDraft(catalog));
+    full.parts = Array.from({ length: PREVIEW_PART_LIMIT }, (_, index) => ({
+      id: `local-${index}`, versionId: catalog.get('release').id, x: (index % 4) * 3, y: Math.floor(index / 4) * 3, values: {},
+    }));
+    full.connections = []; full.inputs = [];
+    expect(await saveMachineDraft(storage, catalog, full)).toBe(true);
+    const before = data.get(MACHINE_DRAFT_KEY);
+    const rejected = await addPreviewPartToDraft(storage, catalog, catalog.get('shout'));
+    expect(rejected).toMatchObject({ ok: false, message: expect.stringContaining('six parts') });
+    expect(data.get(MACHINE_DRAFT_KEY)).toBe(before);
   });
 });

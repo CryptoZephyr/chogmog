@@ -223,11 +223,12 @@ export function ChainCanvas() {
       </details>
       <details id="sign-in" open={walletOpen} onToggle={(e) => setWalletOpen(e.currentTarget.open)}>
         <summary>Sign in (no transaction)</summary>
-        <div className="wallet-wrap"><WalletPanel /></div>
+        <div className="wallet-wrap"><WalletPanel ownerTools={false} /></div>
       </details>
       <details>
         <summary>More</summary>
         <p><a href="?harness=machine">Build a free machine from preview parts</a></p>
+        <p><a href="?harness=chog">Make a part from your Chog</a></p>
         <p><a href="?harness=falling">Open the T0 falling-body harness</a></p>
       </details>
     </aside>

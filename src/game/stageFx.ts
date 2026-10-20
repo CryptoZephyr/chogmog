@@ -93,3 +93,22 @@ export function wireSpent(events: readonly ChainEvent[], type: EventType, tick: 
   const at = firstTick(events, type);
   return at !== undefined && tick - at >= PULSE_TICKS;
 }
+
+export interface WordBox { x: number; y: number; halfW: number; halfH: number }
+
+/** Keeps earlier words in place and moves each later word vertically off any word it overlaps, inside 0..height. */
+export function separateWords(boxes: readonly WordBox[], height: number, gap = 4): WordBox[] {
+  const placed: WordBox[] = [];
+  for (const box of boxes) {
+    let y = box.y;
+    for (let tries = 0; tries <= placed.length; tries++) {
+      const hit = placed.find((other) => Math.abs(other.x - box.x) < other.halfW + box.halfW && Math.abs(other.y - y) < other.halfH + box.halfH + gap);
+      if (!hit) break;
+      const below = hit.y + hit.halfH + box.halfH + gap;
+      const above = hit.y - hit.halfH - box.halfH - gap;
+      y = (y >= hit.y && below <= height - box.halfH) || above < box.halfH ? below : above;
+    }
+    placed.push({ ...box, y: Math.min(Math.max(y, box.halfH), height - box.halfH) });
+  }
+  return placed;
+}

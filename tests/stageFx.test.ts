@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChainEvent } from '../src/game/chain';
-import { activeWords, BOB_TICKS, bobOffset, pathPrefix, pulseProgress, PULSE_TICKS, SHAKE_TICKS, shakeOffset, WORD_TICKS, wireSpent } from '../src/game/stageFx';
+import { activeWords, BOB_TICKS, bobOffset, pathPrefix, pulseProgress, PULSE_TICKS, separateWords, SHAKE_TICKS, shakeOffset, WORD_TICKS, wireSpent } from '../src/game/stageFx';
 
 const event = (tick: number, type: ChainEvent['type'], target = 'x'): ChainEvent => ({ tick, type, actor: 'a', target });
 
@@ -57,5 +57,21 @@ describe('stage effects', () => {
     expect(wireSpent(events, 'sensor', 40 + PULSE_TICKS - 1)).toBe(false);
     expect(wireSpent(events, 'sensor', 40 + PULSE_TICKS)).toBe(true);
     expect(wireSpent(events, 'lever', 500)).toBe(false);
+  });
+
+  it('moves later words off earlier ones and keeps every word on the stage', () => {
+    const boxes = [{ x: 100, y: 100, halfW: 60, halfH: 20 }, { x: 120, y: 110, halfW: 40, halfH: 20 }, { x: 110, y: 105, halfW: 50, halfH: 20 }, { x: 400, y: 100, halfW: 30, halfH: 20 }];
+    const placed = separateWords(boxes, 640);
+    expect(placed[0]).toEqual(boxes[0]);
+    expect(placed[3]).toEqual(boxes[3]);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      const overlap = Math.abs(a.x - b.x) < a.halfW + b.halfW && Math.abs(a.y - b.y) < a.halfH + b.halfH;
+      expect(overlap, `${i} vs ${j}`).toBe(false);
+    }
+    for (const box of separateWords([{ x: 50, y: 630, halfW: 40, halfH: 20 }, { x: 50, y: 630, halfW: 40, halfH: 20 }], 640)) {
+      expect(box.y - box.halfH).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.halfH).toBeLessThanOrEqual(640);
+    }
   });
 });

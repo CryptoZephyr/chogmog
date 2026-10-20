@@ -6,7 +6,7 @@ import { MAX_TICKS, WORLD_HEIGHT } from '../domain/fallingScene';
 import { abilityTone, fontFamily, hexToNumber, laserTone, loadFonts, pixiTheme as theme } from '../ui/tokens';
 import { ChainSimulation, GEOMETRY, type ChainSnapshot, type EventType } from './chain';
 import { FixedStepClock } from './fixedStepClock';
-import { activeWords, bobOffset, newCues, pathPrefix, pulseProgress, shakeOffset, SOUND_WORD, WORD_TICKS, wireSpent, type Point } from './stageFx';
+import { activeWords, bobOffset, newCues, pathPrefix, pulseProgress, separateWords, shakeOffset, SOUND_WORD, WORD_TICKS, wireSpent, type Point } from './stageFx';
 
 export interface ChainView {
   snapshot: ChainSnapshot;
@@ -431,19 +431,22 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
       const [hx, hy] = lit[lit.length - 1];
       pulses.circle(px(hx), py(hy), 7).fill(theme.white).stroke({ color: wire.color, width: 3 });
     }
-    const live = new Map(activeWords(snapshot.events, snapshot.tick).map((word) => [word.type, word.age]));
-    for (const [type, item] of wordViews) {
-      const age = live.get(type);
-      item.visible = age !== undefined && !(type === 'laser' && !laserColours);
-      if (age === undefined) continue;
+    const live = activeWords(snapshot.events, snapshot.tick).filter(({ type }) => !(type === 'laser' && !laserColours));
+    for (const item of wordViews.values()) item.visible = false;
+    const shown: { item: Text; box: { x: number; y: number; halfW: number; halfH: number } }[] = [];
+    for (const { type, age } of live) {
+      const item = wordViews.get(type);
+      if (!item) continue;
+      item.visible = true;
       const tone = type === 'laser' && laserColours ? hexToNumber(laserColours.bright) : type === 'lifted' ? lift.bright : type === 'teleported' || type === 'portal-blocked' ? portal.bright : theme.white;
       item.style.fill = tone;
       const [wx, wy] = WORD_AT[type]!(scene);
       item.scale.set((compact ? 1.5 : 1) * (still || age >= 6 ? 1 : 1.3 - age * 0.05));
       const halfW = item.width / 2 + 8, halfH = item.height / 2 + 8;
-      item.position.set(Math.min(Math.max(px(wx), halfW), app.screen.width - halfW), Math.min(Math.max(py(wy), halfH), app.screen.height - halfH));
+      shown.push({ item, box: { x: Math.min(Math.max(px(wx), halfW), app.screen.width - halfW), y: py(wy), halfW, halfH } });
       item.alpha = age > WORD_TICKS - 10 ? (WORD_TICKS - age) / 10 : 1;
     }
+    separateWords(shown.map(({ box }) => box), app.screen.height).forEach(({ x, y }, index) => shown[index].item.position.set(x, y));
 
     stamp.clear();
     if (snapshot.tick >= MAX_TICKS && !snapshot.bannerOpen) {

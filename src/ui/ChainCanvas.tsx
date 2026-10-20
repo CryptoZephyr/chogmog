@@ -6,6 +6,7 @@ import type { ChainStage, ChainView, StopPoint } from '../game/chainStage';
 import { abilityTone, colour, laserTone, wallFor } from './tokens';
 import { AppFrame } from './AppFrame';
 import { WalletPanel } from './WalletPanel';
+import { comicStrip } from './comicStrip';
 
 type Power = 'laser' | 'lift' | 'portal';
 const POWER_TRAIT: Record<Power, string> = { laser: 'laser eyes', lift: 'Fire aura', portal: 'Wizard hat' };
@@ -97,6 +98,8 @@ export function ChainCanvas() {
     : runs === 1 && complete ? { text: "That's the chain. Change one thing.", field: 'portalExitY' }
     : runs >= 2 && complete && scene.liftToken === '846' ? { text: 'Now swap the Fire Chog.', field: 'liftToken' }
     : null;
+  const stopHint = stopKey ? (stopKey === 'laser' && !getPreview(scene.laserToken).kit.includes('laser') ? 'Stopped at the laser. Needs laser eyes, so try Chog #25.' : STOPPED[stopKey]) : null;
+  const strip = view ? comicStrip(view.snapshot.events, scene.message, stopKey) : [];
   const status = error ? 'Physics or WebGL failed to start. Reload in a supported browser.' : !ready ? 'Loading physics and renderer' : view.running ? 'Watch it go' : complete ? 'Run complete. Reset to run again.' : view.snapshot.tick > 0 ? 'Paused' : 'Ready';
   const highlight = (field: string) => (coach?.field === field ? { outline: `3px solid ${colour.blush}`, outlineOffset: 4, borderRadius: 4 } : undefined);
 
@@ -140,7 +143,13 @@ export function ChainCanvas() {
         <p className="status" role="status">{status}</p>
         <span className="tick" aria-hidden="true">Tick {view?.snapshot.tick ?? 0}/{MAX_TICKS}</span>
       </div>
-      {stopKey && <div className="caption-box stopped" role="status"><span className="x-stamp" aria-hidden="true">X</span>{stopKey === 'laser' && !getPreview(scene.laserToken).kit.includes('laser') ? 'Stopped at the laser. Needs laser eyes, so try Chog #25.' : STOPPED[stopKey]}</div>}
+      {stopHint && <div className="caption-box stopped" role="status"><span className="x-stamp" aria-hidden="true">X</span>{stopHint}</div>}
+      {strip.length > 0 && <ol className="panel strip" aria-label="Comic strip of this run" aria-live="polite">
+        {strip.map((panel) => <li key={panel.key} className={panel.stopped ? 'stopped' : undefined} style={{ borderTopColor: panel.tone }}>
+          {panel.stopped ? <span className="x-stamp" aria-hidden="true">X</span> : <span className="sound-word" aria-hidden="true">{panel.word}</span>}
+          <span className="strip-caption">{panel.caption}</span>
+        </li>)}
+      </ol>}
       {coach && <div className="caption-box">{coach.text}<button className="dismiss" onClick={() => setCoachOff(true)}>Hide tips</button></div>}
       {view && Object.values(view.artwork).includes('unavailable') && <p className="alert" role="alert">Some Chog art didn't load. The machine still plays. Reload to retry.</p>}
       {!saved && <p className="alert" role="alert">Saving isn't available in this browser. This arrangement still works in this tab.</p>}
@@ -178,7 +187,7 @@ export function ChainCanvas() {
       <details>
         <summary>Event log ({view?.snapshot.events.length ?? 0})</summary>
         <output aria-label="Simulation telemetry">{view ? `Tick ${view.snapshot.tick}/${MAX_TICKS} | ${view.snapshot.bodyCount} physical bodies | Balloon ${view.snapshot.balloonPopped ? 'popped' : 'intact'} | Banner ${view.snapshot.bannerOpen ? 'open' : 'closed'}` : 'Waiting for engine'}</output>
-        <ol aria-live="polite">{view?.snapshot.events.map((event, index) => <li key={index}>Tick {event.tick}: {event.actor} → {event.type} → {event.target}{event.sourceToken ? ` (token ${event.sourceToken})` : ''}</li>)}</ol>
+        <ol>{view?.snapshot.events.map((event, index) => <li key={index}>Tick {event.tick}: {event.actor} → {event.type} → {event.target}{event.sourceToken ? ` (token ${event.sourceToken})` : ''}</li>)}</ol>
       </details>
       <details>
         <summary>Where the Chog data comes from</summary>

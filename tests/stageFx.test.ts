@@ -74,4 +74,14 @@ describe('stage effects', () => {
       expect(box.y + box.halfH).toBeLessThanOrEqual(640);
     }
   });
+
+  it('finds a free spot for a word squeezed between two others', () => {
+    const boxes = [{ x: 260, y: 352, halfW: 80, halfH: 30 }, { x: 264, y: 464, halfW: 90, halfH: 30 }, { x: 400, y: 400, halfW: 100, halfH: 30 }, { x: 272, y: 272, halfW: 120, halfH: 30 }];
+    const placed = separateWords(boxes, 640);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      expect(Math.abs(a.x - b.x) < a.halfW + b.halfW && Math.abs(a.y - b.y) < a.halfH + b.halfH, `${i} vs ${j}`).toBe(false);
+    }
+    for (const box of placed) expect(box.y - box.halfH >= 0 && box.y + box.halfH <= 640).toBe(true);
+  });
 });

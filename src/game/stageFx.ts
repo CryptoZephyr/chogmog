@@ -96,19 +96,16 @@ export function wireSpent(events: readonly ChainEvent[], type: EventType, tick: 
 
 export interface WordBox { x: number; y: number; halfW: number; halfH: number }
 
-/** Keeps earlier words in place and moves each later word vertically off any word it overlaps, inside 0..height. */
+/** Keeps earlier words in place and moves each later word to the free height nearest its own, inside 0..height. */
 export function separateWords(boxes: readonly WordBox[], height: number, gap = 4): WordBox[] {
   const placed: WordBox[] = [];
   for (const box of boxes) {
-    let y = box.y;
-    for (let tries = 0; tries <= placed.length; tries++) {
-      const hit = placed.find((other) => Math.abs(other.x - box.x) < other.halfW + box.halfW && Math.abs(other.y - y) < other.halfH + box.halfH + gap);
-      if (!hit) break;
-      const below = hit.y + hit.halfH + box.halfH + gap;
-      const above = hit.y - hit.halfH - box.halfH - gap;
-      y = (y >= hit.y && below <= height - box.halfH) || above < box.halfH ? below : above;
-    }
-    placed.push({ ...box, y: Math.min(Math.max(y, box.halfH), height - box.halfH) });
+    const inside = (y: number) => Math.min(Math.max(y, box.halfH), height - box.halfH);
+    const clear = (y: number) => placed.every((other) => Math.abs(other.x - box.x) >= other.halfW + box.halfW || Math.abs(other.y - y) >= other.halfH + box.halfH + gap);
+    const candidates = [inside(box.y), ...placed.flatMap((other) => [other.y + other.halfH + box.halfH + gap, other.y - other.halfH - box.halfH - gap])]
+      .filter((y) => y >= box.halfH && y <= height - box.halfH && clear(y))
+      .sort((a, b) => Math.abs(a - box.y) - Math.abs(b - box.y));
+    placed.push({ ...box, y: candidates[0] ?? inside(box.y) });
   }
   return placed;
 }

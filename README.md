@@ -40,13 +40,13 @@ Clean-checkout acceptance uses `pnpm install --frozen-lockfile` followed by `pnp
 
 `PostgresStore` implements shared one-time challenge consumption, digest-only sessions, revocation, content-bound publication grants and immutable version storage. SQL transactions serialize competing idempotency keys, check the active session and grant, write the version and source credits, and consume the grant together. Failure rolls everything back. Database constraints and triggers enforce content hashes, uniqueness and immutable published records. `anon` and `authenticated` have no schema/table access, and RLS has no client policies. Browser access is through the API only, not Supabase Auth or direct database writes.
 
-The migration runs only when explicitly invoked. It never starts from an HTTP request. Use a dedicated hosted Supabase database and its server-only Postgres/pooler connection with `sslmode=verify-full`, not another application's credentials. If its certificate chain requires the official Supabase CA, configure `NODE_EXTRA_CA_CERTS` with that public CA. Never use `no-verify` or disable certificate verification. No local Postgres or Docker is required or allowed for this project.
+The migration runs only when explicitly invoked. It never starts from an HTTP request. Use a dedicated hosted Supabase or Neon database and its server-only Postgres/pooler connection with `sslmode=verify-full`. On Neon, run migrations over the direct connection, without the `-pooler` hostname suffix, not another application's credentials. If its certificate chain requires the official Supabase CA, configure `NODE_EXTRA_CA_CERTS` with that public CA. Never use `no-verify` or disable certificate verification. No local Postgres or Docker is required or allowed for this project.
 
 Set these only in the server environment, never with a `VITE_` prefix:
 
 ```text
 APP_ORIGIN=https://your-exact-chogmog-domain.example
-CHOGMOG_DATABASE_URL=<dedicated Supabase connection, TLS verify-full>
+CHOGMOG_DATABASE_URL=<dedicated Supabase or Neon connection, TLS verify-full>
 CHOGMOG_BACKEND_ENABLED=false
 ```
 

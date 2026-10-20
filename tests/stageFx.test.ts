@@ -84,4 +84,13 @@ describe('stage effects', () => {
     }
     for (const box of placed) expect(box.y - box.halfH >= 0 && box.y + box.halfH <= 640).toBe(true);
   });
+
+  it('keeps words apart when their measured sizes are fractional', () => {
+    const boxes = [{ x: 264, y: 464, halfW: 128.98765140997378, halfH: 52.57410746323263 }, { x: 260, y: 352, halfW: 86.70148642808248, halfH: 49.60923170142476 }, { x: 400, y: 400, halfW: 96.42460397218632, halfH: 50.290963789167115 }, { x: 272, y: 272, halfW: 170.22339683251175, halfH: 55.46533352205634 }];
+    const placed = separateWords(boxes, 640);
+    for (let i = 0; i < placed.length; i++) for (let j = 0; j < i; j++) {
+      const a = placed[i], b = placed[j];
+      expect(Math.abs(a.x - b.x) < a.halfW + b.halfW - 0.01 && Math.abs(a.y - b.y) < a.halfH + b.halfH - 0.01, `${i} vs ${j}`).toBe(false);
+    }
+  });
 });

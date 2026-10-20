@@ -101,7 +101,7 @@ export function separateWords(boxes: readonly WordBox[], height: number, gap = 4
   const placed: WordBox[] = [];
   for (const box of boxes) {
     const inside = (y: number) => Math.min(Math.max(y, box.halfH), height - box.halfH);
-    const clear = (y: number) => placed.every((other) => Math.abs(other.x - box.x) >= other.halfW + box.halfW || Math.abs(other.y - y) >= other.halfH + box.halfH + gap);
+    const clear = (y: number) => placed.every((other) => Math.abs(other.x - box.x) >= other.halfW + box.halfW || Math.abs(other.y - y) >= other.halfH + box.halfH + gap - 0.01);
     const candidates = [inside(box.y), ...placed.flatMap((other) => [other.y + other.halfH + box.halfH + gap, other.y - other.halfH - box.halfH - gap])]
       .filter((y) => y >= box.halfH && y <= height - box.halfH && clear(y))
       .sort((a, b) => Math.abs(a - box.y) - Math.abs(b - box.y));

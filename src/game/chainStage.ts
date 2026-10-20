@@ -4,9 +4,9 @@ import { loadArtwork } from '../domain/artwork';
 import type { ChainScene } from '../domain/chainScene';
 import { MAX_TICKS, WORLD_HEIGHT } from '../domain/fallingScene';
 import { abilityTone, fontFamily, hexToNumber, laserTone, loadFonts, pixiTheme as theme } from '../ui/tokens';
-import { ChainSimulation, GEOMETRY, type ChainSnapshot } from './chain';
+import { ChainSimulation, GEOMETRY, type ChainSnapshot, type EventType } from './chain';
 import { FixedStepClock } from './fixedStepClock';
-import { activeWords, pathPrefix, pulseProgress, SOUND_WORD, WORD_TICKS, type Point } from './stageFx';
+import { activeWords, cuesBetween, pathPrefix, pulseProgress, SOUND_WORD, WORD_TICKS, type Point } from './stageFx';
 
 export interface ChainView {
   snapshot: ChainSnapshot;
@@ -88,7 +88,7 @@ function nozzle(g: Graphics, x: number, y: number, color: number) {
   g.circle(px(x), py(y), 6).fill(color).stroke({ color: theme.ink, width: 2 });
 }
 
-export async function createChainStage(host: HTMLElement, initial: ChainScene, signal: AbortSignal, notify: (view: ChainView) => void): Promise<ChainStage> {
+export async function createChainStage(host: HTMLElement, initial: ChainScene, signal: AbortSignal, notify: (view: ChainView) => void, cue: (type: EventType) => void = () => undefined): Promise<ChainStage> {
   const [simulation] = await Promise.all([ChainSimulation.create(initial), loadFonts()]);
   if (signal.aborted) { simulation.dispose(); throw new DOMException('Cancelled', 'AbortError'); }
   const app = new Application();
@@ -208,6 +208,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   let running = false;
   let disposed = false;
   let showLabels = false;
+  let heard = -1;
   const publish = () => notify({ snapshot: simulation.snapshot(), running, artwork: { ...artwork }, bitmaps: Object.fromEntries([...textures].map(([token, entry]) => [token, entry.bitmap])) });
 
   let fitted: string | null = null;
@@ -457,6 +458,8 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   app.ticker.add((ticker) => {
     if (!running || disposed) return;
     const snapshot = simulation.step(clock.consume(ticker.elapsedMS / 1000));
+    for (const type of cuesBetween(snapshot.events, heard, snapshot.tick)) cue(type);
+    heard = snapshot.tick;
     draw();
     if (snapshot.tick >= MAX_TICKS) pause();
     else if (snapshot.tick % 6 === 0) publish();
@@ -476,7 +479,7 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
   return {
     run() { if (disposed || running || simulation.snapshot().tick >= MAX_TICKS) return; running = true; clock.reset(); app.start(); publish(); },
     pause,
-    reset(next) { if (disposed) return; simulation.reset(next); scene = next; pause(); },
+    reset(next) { if (disposed) return; simulation.reset(next); scene = next; heard = -1; pause(); },
     setLabels(visible) { if (disposed) return; showLabels = visible; if (!running) render(); },
     dispose() {
       if (disposed) return;

@@ -7,6 +7,7 @@ import { abilityTone, colour, laserTone, wallFor } from './tokens';
 import { AppFrame } from './AppFrame';
 import { WalletPanel } from './WalletPanel';
 import { comicStrip } from './comicStrip';
+import { createSoundPlayer, loadSoundOn, saveSoundOn, type SoundPlayer } from './sound';
 
 type Power = 'laser' | 'lift' | 'portal';
 const POWER_TRAIT: Record<Power, string> = { laser: 'laser eyes', lift: 'Fire aura', portal: 'Wizard hat' };
@@ -46,6 +47,8 @@ export function ChainCanvas() {
   const [saved, setSaved] = useState(true);
   const [messageInput, setMessageInput] = useState(scene.message);
   const [labels, setLabels] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => loadSoundOn());
+  const sound = useRef<SoundPlayer | null>(null);
   const [runs, setRuns] = useState(0);
   const [coachOff, setCoachOff] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
@@ -61,11 +64,17 @@ export function ChainCanvas() {
   }, []);
 
   useEffect(() => {
+    const player = createSoundPlayer(loadSoundOn());
+    sound.current = player;
+    return () => { player.dispose(); if (sound.current === player) sound.current = null; };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     let instance: ChainStage | undefined;
     void import('../game/chainStage').then(({ createChainStage }) => createChainStage(host.current!, initial.current, controller.signal, (next) => {
       if (!controller.signal.aborted) setView(next);
-    })).then((created) => {
+    }, (type) => sound.current?.play(type))).then((created) => {
       if (controller.signal.aborted) created.dispose();
       else { instance = created; stage.current = created; }
     }).catch(() => { if (!controller.signal.aborted) setError(true); });
@@ -79,9 +88,10 @@ export function ChainCanvas() {
   const complete = view?.snapshot.tick === MAX_TICKS;
   const stalled = complete && !view.snapshot.bannerOpen;
   const canRun = ready && !view.running && !complete && !!messageInput.trim();
-  const run = () => { if (!canRun) return; if (view.snapshot.tick === 0) setRuns((n) => n + 1); stage.current?.run(); };
+  const run = () => { if (!canRun) return; if (view.snapshot.tick === 0) setRuns((n) => n + 1); sound.current?.unlock(); stage.current?.run(); };
   const pause = () => { if (ready && view.running) stage.current?.pause(); };
   const reset = () => { if (!ready) return; stage.current?.reset(scene); setMessageInput(scene.message); };
+  const toggleSound = () => { const next = !soundOn; setSoundOn(next); saveSoundOn(next); sound.current?.setEnabled(next); };
   const toggleLabels = () => { const next = !labels; setLabels(next); stage.current?.setLabels(next); };
 
   useEffect(() => {
@@ -149,6 +159,7 @@ export function ChainCanvas() {
         <button className="btn" disabled={!ready || !view.running} onClick={pause}>Pause</button>
         <button className="btn" disabled={!ready} onClick={reset}>Reset</button>
         <label className="toggle"><input type="checkbox" checked={labels} onChange={toggleLabels} /> Show labels</label>
+        <label className="toggle"><input type="checkbox" checked={soundOn} onChange={toggleSound} /> Sound</label>
         <p className="status" role="status">{status}</p>
         <span className="tick" aria-hidden="true">Tick {view?.snapshot.tick ?? 0}/{MAX_TICKS}</span>
       </div>

@@ -52,3 +52,15 @@ export function pathPrefix(points: readonly Point[], t: number): Point[] {
   }
   return prefix;
 }
+
+/** Event kinds whose first occurrence falls after one tick and up to another, in order. These cue sounds. */
+export function cuesBetween(events: readonly ChainEvent[], after: number, through: number): EventType[] {
+  const seen = new Set<EventType>();
+  const cues: EventType[] = [];
+  for (const event of events) {
+    if (seen.has(event.type)) continue;
+    seen.add(event.type);
+    if (event.tick > after && event.tick <= through) cues.push(event.type);
+  }
+  return cues;
+}

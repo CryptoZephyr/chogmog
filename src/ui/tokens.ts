@@ -33,7 +33,7 @@ export function laserTone(eyes: string | undefined): Tone | null {
 
 /**
  * Wall colour per Genesis Background trait. Most are sampled from the edge of four artworks that share one colour.
- * The artwork for the last ten values shows no shared background colour, so their walls follow the trait name.
+ * The artwork for the last eleven values shows no shared background colour, so their walls follow the trait name.
  * Any value not listed here uses the fallback wall.
  */
 export const BACKGROUND_SWATCH: Readonly<Record<string, string>> = {
@@ -63,6 +63,7 @@ export const BACKGROUND_SWATCH: Readonly<Record<string, string>> = {
   'Royal Blue': '#4169E1',
   'Blood Red': '#B3122B',
   Magenta: '#E83FD0',
+  'Aqua Blue': '#3FB8E8',
 };
 
 export const hexToNumber = (hex: string) => Number.parseInt(hex.slice(1), 16);

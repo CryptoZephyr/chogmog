@@ -37,8 +37,8 @@ describe('design tokens', () => {
   });
 
   it('gives each known Background its own wall', () => {
-    expect(Object.keys(BACKGROUND_SWATCH)).toHaveLength(26);
-    expect(new Set(Object.keys(BACKGROUND_SWATCH).map(wallFor)).size).toBe(26);
+    expect(Object.keys(BACKGROUND_SWATCH)).toHaveLength(27);
+    expect(new Set(Object.keys(BACKGROUND_SWATCH).map(wallFor)).size).toBe(27);
   });
 
   it('uses the lime fallback for unknown or missing Background values', () => {

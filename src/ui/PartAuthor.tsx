@@ -132,7 +132,7 @@ export function PartAuthor({ address, onUsePreviewPart }: { address: string | nu
     } finally { setBusy(false); }
   };
   return <section aria-label="Holder part authoring">
-    {previewMode && <div className="panel" style={{ position: 'relative', padding: 14 }}>
+    {previewMode && <div className="panel preview-banner">
       <span className="tape">PREVIEW</span>
       <p>Preview Chog. Public data, not yours. Parts made here stay in this browser. They can't be published, counted as reuse, or shown as a holder's work.</p>
     </div>}

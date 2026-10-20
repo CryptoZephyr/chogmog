@@ -32,9 +32,9 @@ export function laserTone(eyes: string | undefined): Tone | null {
 }
 
 /**
- * Hex values sampled from the edge of four Genesis artworks per Background (one colour shared by all four).
- * Lemon, Lemon Yellow, Light Purple, Lime Green, Deep Purple and Red Sky had no consistent sampled colour,
- * so they and any unknown value use the fallback wall.
+ * Wall colour per Genesis Background trait. Most are sampled from the edge of four artworks that share one colour.
+ * The artwork for the last ten values shows no shared background colour, so their walls follow the trait name.
+ * Any value not listed here uses the fallback wall.
  */
 export const BACKGROUND_SWATCH: Readonly<Record<string, string>> = {
   'Fresh Green': '#B3EDAC',
@@ -53,6 +53,16 @@ export const BACKGROUND_SWATCH: Readonly<Record<string, string>> = {
   'Sky Blue': '#8ED3EE',
   'Soft Lavender': '#A08EEE',
   Sunlight: '#EED397',
+  Lemon: '#FFF27A',
+  'Lemon Yellow': '#FFE135',
+  'Light Purple': '#C9A7F5',
+  'Deep Purple': '#6A3FC9',
+  'Lime Green': '#B5E550',
+  'Red Sky': '#F26B5B',
+  Gold: '#E8C252',
+  'Royal Blue': '#4169E1',
+  'Blood Red': '#B3122B',
+  Magenta: '#E83FD0',
 };
 
 export const hexToNumber = (hex: string) => Number.parseInt(hex.slice(1), 16);

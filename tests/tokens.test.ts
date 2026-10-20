@@ -36,14 +36,13 @@ describe('design tokens', () => {
     }
   });
 
-  it('gives each sampled Background its own wall', () => {
-    expect(Object.keys(BACKGROUND_SWATCH)).toHaveLength(16);
-    expect(new Set(Object.keys(BACKGROUND_SWATCH).map(wallFor)).size).toBe(16);
+  it('gives each known Background its own wall', () => {
+    expect(Object.keys(BACKGROUND_SWATCH)).toHaveLength(26);
+    expect(new Set(Object.keys(BACKGROUND_SWATCH).map(wallFor)).size).toBe(26);
   });
 
-  it('uses the lime fallback for unknown, missing or unsampled Background values', () => {
+  it('uses the lime fallback for unknown or missing Background values', () => {
     expect(wallFor(undefined)).toBe(wallFor('Not a real background'));
-    for (const name of ['Lemon', 'Lemon Yellow', 'Light Purple', 'Lime Green', 'Deep Purple', 'Red Sky']) expect(wallFor(name), name).toBe(wallFor(undefined));
     expect(contrast(colour.ink, wallFor(undefined))).toBeGreaterThanOrEqual(10);
   });
 });

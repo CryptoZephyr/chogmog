@@ -442,7 +442,8 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
       item.style.fill = tone;
       const [wx, wy] = WORD_AT[type]!(scene);
       item.scale.set((compact ? 1.5 : 1) * (still || age >= 6 ? 1 : 1.3 - age * 0.05));
-      const halfW = item.width / 2 + 8, halfH = item.height / 2 + 8;
+      const bounds = item.getBounds();
+      const halfW = bounds.width / 2 + 6, halfH = bounds.height / 2 + 6;
       shown.push({ item, box: { x: Math.min(Math.max(px(wx), halfW), app.screen.width - halfW), y: py(wy), halfW, halfH } });
       item.alpha = age > WORD_TICKS - 10 ? (WORD_TICKS - age) / 10 : 1;
     }

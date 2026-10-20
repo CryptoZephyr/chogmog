@@ -1,0 +1,31 @@
+{
+  "mode": "public-data-preview",
+  "chainId": 143,
+  "collection": "0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763",
+  "rpc": "https://rpc.monad.xyz",
+  "tokenURIBlock": "0x6d1a34c",
+  "retrievedAt": "2026-10-18T06:51:31.778Z",
+  "metadataCid": "bafybeid4ybujnscdipkno7ps5utqelp5ry5ryreqhay3zhgk3a6x4jruqu",
+  "artworkCid": "bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e",
+  "gateway": "https://ipfs.filebase.io/ipfs/",
+  "entries": [
+    {
+      "tokenId": "846",
+      "artworkNumber": 338,
+      "name": "CHOG #338",
+      "tokenURI": "ipfs://bafybeid4ybujnscdipkno7ps5utqelp5ry5ryreqhay3zhgk3a6x4jruqu/338.json",
+      "imageURI": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/338.webp",
+      "metadataSha256": "41f997e777c57636e3669f56e70a825ffc0240efec51738e9d0ee5a33cb60cad",
+      "artworkSha256": "11da0323d2a63ff762a30eef6d229582c6cb00ab7c88484adffba285de6ec091"
+    },
+    {
+      "tokenId": "533",
+      "artworkNumber": 25,
+      "name": "CHOG #25",
+      "tokenURI": "ipfs://bafybeid4ybujnscdipkno7ps5utqelp5ry5ryreqhay3zhgk3a6x4jruqu/25.json",
+      "imageURI": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/25.webp",
+      "metadataSha256": "0897899c5e4d2ba01ea9ebe7cf064c6db6c162b6993cb602817de0cd4008b476",
+      "artworkSha256": "f0e831d80e42088083536fdb4cb0bbb1bc1dd1964862137e00c3d5aafabe5869"
+    }
+  ]
+}

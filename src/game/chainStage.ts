@@ -431,8 +431,9 @@ export async function createChainStage(host: HTMLElement, initial: ChainScene, s
       const tone = type === 'laser' && laserColours ? hexToNumber(laserColours.bright) : type === 'lifted' ? lift.bright : type === 'teleported' || type === 'portal-blocked' ? portal.bright : theme.white;
       item.style.fill = tone;
       const [wx, wy] = WORD_AT[type]!(scene);
-      item.position.set(px(wx), py(wy));
       item.scale.set((compact ? 1.5 : 1) * (still || age >= 6 ? 1 : 1.3 - age * 0.05));
+      const halfW = item.width / 2 + 8, halfH = item.height / 2 + 8;
+      item.position.set(Math.min(Math.max(px(wx), halfW), app.screen.width - halfW), Math.min(Math.max(py(wy), halfH), app.screen.height - halfH));
       item.alpha = age > WORD_TICKS - 10 ? (WORD_TICKS - age) / 10 : 1;
     }
 

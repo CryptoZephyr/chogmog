@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { canonicalJson } from '../domain/canonical';
 import { compileKit, getPreview, parseMetadata } from '../domain/chog';
 import { createPartVersion, parseSourcePin, previewSourcePin, resolvePreviewSource, type PartVersion } from '../domain/documents';
-import { authoredPart, EDITABLE_ACTIONS, loadPartSettings, loadPartSource, newPartSettings, savePartSettings, savePartSource, type EditableAction, type PartSettings } from '../domain/partAuthoring';
+import { authoredPart, checkedSourcePin, EDITABLE_ACTIONS, loadPartSettings, loadPartSource, newPartSettings, previewPinToken, savePartSettings, savePartSource, type EditableAction, type PartSettings } from '../domain/partAuthoring';
 import { api, assertWallet, injected } from './walletClient';
 import { PartSandbox } from './PartSandbox';
 import { preparePart, publicationAttempt, publishPart, savedAttempt, type PartApproval, type PartReceipt, type PublicationContext } from './partPublication';
@@ -34,7 +34,7 @@ export function PartAuthor({ address, onUsePreviewPart }: { address: string | nu
   const sequence = useRef(0);
   const mounted = useRef(false);
   const attempt = useRef<{ id: string; key: string } | undefined>(undefined);
-  const previewToken = (['533', '846'] as const).find((id) => canonicalJson(source.pin) === canonicalJson(previewSourcePin(id)));
+  const previewToken = previewPinToken(source.pin);
   const previewMode = previewToken !== undefined;
   const editorSource = useMemo(() => previewToken ? { pin: source.pin, metadata: getPreview(previewToken).metadata } : source, [source, previewToken]);
   const partAuthor = previewMode ? draftAuthor : address ?? draftAuthor;
@@ -79,8 +79,7 @@ export function PartAuthor({ address, onUsePreviewPart }: { address: string | nu
       const observation = result.ownership as Record<string, unknown> | undefined;
       if (pin.nft.tokenId !== token || observation?.isOwner !== true || typeof observation.owner !== 'string' || observation.owner.toLowerCase() !== address.toLowerCase() ||
           observation.tokenId !== token || observation.tokenURI !== pin.tokenURI) throw new Error('Source or ownership did not match.');
-      const same = canonicalJson({ ...pin, observedAt: source.pin.observedAt }) === canonicalJson(source.pin);
-      const next = { pin: same ? source.pin : pin, metadata };
+      const next = { pin: checkedSourcePin(source.pin, pin), metadata };
       setSource(next); setSourceSaved(savePartSource(storage, next)); setOwner(address);
       setStatus(`Genesis token ${token} was owned by this wallet at block ${String(observation.blockNumber)}. Publication will recheck ownership.`);
     } catch (error) { if (active()) setStatus(`${error instanceof Error ? error.message : 'Source unavailable.'} Draft kept. Retry source loading.`); }

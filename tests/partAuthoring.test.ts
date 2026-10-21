@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { authoredPart, loadPartSettings, loadPartSource, newPartSettings, parsePartSettings, savePartSettings, savePartSource, type PartSettings } from '../src/domain/partAuthoring';
+import { authoredPart, checkedSourcePin, loadPartSettings, loadPartSource, newPartSettings, parsePartSettings, previewPinToken, savePartSettings, savePartSource, type PartSettings } from '../src/domain/partAuthoring';
 import { getPreview } from '../src/domain/chog';
 import { createPartVersion, previewSourcePin, resolvePreviewSource, validateMachine } from '../src/domain/documents';
 import { PartPreview } from '../src/game/partPreview';
@@ -17,6 +17,23 @@ async function simulation(action: PartSettings['action'], overrides: Partial<Par
 afterEach(() => { for (const sim of simulations.splice(0)) sim.dispose(); });
 
 describe('bounded T6 part authoring', () => {
+  test('fresh owner pins replace bundled previews while checked source pins retain observation-only refreshes', () => {
+    for (const token of ['533', '846'] as const) {
+      const current = previewSourcePin(token);
+      const fresh = { ...current, observedAt: new Date(Date.parse(current.observedAt) + 60_000).toISOString() };
+      const result = checkedSourcePin(current, fresh);
+      expect(result).toEqual(fresh);
+      expect(previewPinToken(result)).toBeUndefined();
+    }
+
+    const checked = { ...previewSourcePin('533'), observedAt: new Date(Date.parse(previewSourcePin('533').observedAt) + 60_000).toISOString() };
+    const refreshed = { ...checked, observedAt: new Date(Date.parse(checked.observedAt) + 60_000).toISOString() };
+    expect(previewPinToken(checked)).toBeUndefined();
+    expect(checkedSourcePin(checked, refreshed)).toBe(checked);
+    const changed = { ...previewSourcePin('846'), observedAt: refreshed.observedAt };
+    expect(checkedSourcePin(checked, changed)).toBe(changed);
+  });
+
   test('all supported presets produce exact immutable T3 parts with genuine-compatible ports', async () => {
     for (const action of ['push', 'shout', 'release', 'laser', 'lift', 'portal'] as const) {
       const version = await build(action, { reuseAllowed: true, ramp: true });

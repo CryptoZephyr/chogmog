@@ -1,4 +1,5 @@
 import { compileKit, getPreview, parseMetadata, TRAIT_RULES_VERSION, type Metadata } from './chog';
+import { canonicalJson } from './canonical';
 import { createPartVersion, ENGINE_VERSION, parseSourcePin, previewSourcePin, type Action, type Control, type PartContent, type SourcePin } from './documents';
 
 export const EDITABLE_ACTIONS = ['push', 'shout', 'release', 'laser', 'lift', 'portal'] as const;
@@ -70,6 +71,12 @@ export function savePartSettings(storage: Pick<Storage, 'setItem'>, settings: Pa
 }
 export interface AuthoringSource { pin: SourcePin; metadata: Metadata }
 export const PART_SOURCE_KEY = 'chogmog.part-source.v1';
+export function previewPinToken(pin: SourcePin): '533' | '846' | undefined {
+  return (['533', '846'] as const).find((id) => canonicalJson(pin) === canonicalJson(previewSourcePin(id)));
+}
+export function checkedSourcePin(current: SourcePin, fresh: SourcePin): SourcePin {
+  return previewPinToken(current) === undefined && canonicalJson({ ...fresh, observedAt: current.observedAt }) === canonicalJson(current) ? current : fresh;
+}
 export function loadPartSource(storage: Pick<Storage, 'getItem'>): AuthoringSource {
   try {
     const raw = storage.getItem(PART_SOURCE_KEY);

@@ -1,7 +1,7 @@
 # Chogmog implementation rules
 
 - Read the canonical Notion Build, Tasks and current Handoff linked from README before starting a slice. Update Tasks and Handoff with actual commands, code references, evidence and the exact next task after a milestone.
-- Keep the repository private. Final product design belongs to the owner. The neutral development harness is not an approved final UI.
+- The repository is public. Never commit credentials or private data. Final product design belongs to the owner. The neutral development harness is not an approved final UI.
 - Use the single TypeScript package, Node 24, pnpm and exact direct dependency versions. Run `pnpm check` before opening a PR. Do not skip any installed hooks.
 - Keep simulation, rendering, domain data, chain reads and persistence separate. Use fixed-step simulation, stable IDs, bounded scenes and allowlisted actions, never arbitrary user scripts.
 - Preserve free non-holder play/composition and immutable published source versions/credits. Future holder publication requires fresh ownership, no NFT custody or purchase.

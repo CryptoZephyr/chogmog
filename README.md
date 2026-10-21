@@ -55,7 +55,9 @@ Holder publishing hasn't been tried by a real Genesis holder yet.
 - Icons are from [Phosphor Icons](https://phosphoricons.com), under the MIT licence.
 - Fonts are Dela Gothic One and Atkinson Hyperlegible, under the SIL Open Font License.
 
-No open-source licence has been granted for the Chogmog code itself.
+The Chogmog code is released under the [MIT licence](LICENSE). That covers the code only. The Chog artwork, sounds, icons and fonts keep their own terms listed above.
+
+Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 ## For developers
 

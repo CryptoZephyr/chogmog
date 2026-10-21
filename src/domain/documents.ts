@@ -24,6 +24,7 @@ export type Prop = { id: string } & (
 );
 export type Action = { id: string } & (
   | (Point & { type: 'push'; impulse: number; range: number; angle: number })
+  | (Point & { type: 'shout'; impulse: number; range: number })
   | (Point & { type: 'release'; propId: string })
   | (Point & { type: 'laser'; length: number; angle: number })
   | (Point & Bounds & { type: 'lift'; acceleration: number; maxSpeed: number })
@@ -171,7 +172,7 @@ function prop(value: unknown, b: Bounds): Prop {
 }
 function action(value: unknown, b: Bounds): Action {
   const type = (value as RecordValue | null)?.type;
-  const fields = type === 'push' ? ['impulse', 'range', 'angle'] : type === 'release' ? ['propId'] :
+  const fields = type === 'push' ? ['impulse', 'range', 'angle'] : type === 'shout' ? ['impulse', 'range'] : type === 'release' ? ['propId'] :
     type === 'laser' ? ['length', 'angle'] : type === 'lift' ? ['width', 'height', 'acceleration', 'maxSpeed'] :
       type === 'portal' ? ['exitX', 'exitY', 'radius', 'quarterTurns', 'cooldownTicks'] : null;
   if (!fields) throw new Error('Unsupported action');
@@ -179,6 +180,7 @@ function action(value: unknown, b: Bounds): Action {
   const base = { id: id(a.id), ...point(a, b) };
   if (type === 'release') return { ...base, type, propId: id(a.propId) };
   if (type === 'push') return { ...base, type, impulse: number(a.impulse, 0, 8), range: number(a.range, 0.1, 2), angle: number(a.angle, -Math.PI, Math.PI) };
+  if (type === 'shout') return { ...base, type, impulse: number(a.impulse, 0, 8), range: number(a.range, 0.1, 2) };
   if (type === 'laser') return { ...base, type, length: number(a.length, 0.1, WORLD_WIDTH), angle: number(a.angle, -Math.PI, Math.PI) };
   if (type === 'lift') {
     const width = number(a.width, 0.1, b.width), height = number(a.height, 0.1, b.height);
@@ -205,6 +207,7 @@ function ports(object: Prop | Action): Ports {
     case 'ramp': return { input: {}, output: {} };
     case 'release': return { input: { trigger: 'event' }, output: { released: 'body' } };
     case 'push': return { input: { trigger: 'event' }, output: { pushed: 'body' } };
+    case 'shout': return { input: { trigger: 'event' }, output: { shouted: 'body' } };
     case 'laser': return { input: { trigger: 'event' }, output: { fired: 'event' } };
     case 'lift': return { input: { body: 'body' }, output: { lifted: 'body' } };
     case 'portal': return { input: { body: 'body' }, output: { teleported: 'body' } };
@@ -232,6 +235,7 @@ function controlBounds(object: Prop | Action, field: string): [number, number] {
   if (object.type === 'ball' && field === 'restitution') return [0, 0.95];
   if (object.type === 'laser' && field === 'length') return [0.1, WORLD_WIDTH];
   if (object.type === 'push' && field === 'impulse') return [0, 8];
+  if (object.type === 'shout' && field === 'impulse') return [0, 8];
   if (object.type === 'lift' && field === 'acceleration') return [0, 24];
   if (object.type === 'lift' && field === 'maxSpeed') return [0, 8];
   throw new Error('Field cannot be exposed');

@@ -1,7 +1,8 @@
 import { compileKit, getPreview, parseMetadata, TRAIT_RULES_VERSION, type Metadata } from './chog';
+import { canonicalJson } from './canonical';
 import { createPartVersion, ENGINE_VERSION, parseSourcePin, previewSourcePin, type Action, type Control, type PartContent, type SourcePin } from './documents';
 
-export const EDITABLE_ACTIONS = ['push', 'release', 'laser', 'lift', 'portal'] as const;
+export const EDITABLE_ACTIONS = ['push', 'shout', 'release', 'laser', 'lift', 'portal'] as const;
 export type EditableAction = typeof EDITABLE_ACTIONS[number];
 export interface PartSettings {
   partId: string; action: EditableAction; ballX: number; ballY: number; restitution: number;
@@ -30,22 +31,24 @@ export async function authoredPart(settings: PartSettings, author: string, sourc
   const s = parsePartSettings(settings);
   if (!compileKit(source.metadata).includes(s.action)) throw new Error('This Chog does not have that action');
   const action: Action = s.action === 'push' ? { id: 'chog', type: 'push', x: s.ballX - 0.4, y: 0.5, impulse: s.impulse, range: 1, angle: s.angle } :
+    s.action === 'shout' ? { id: 'chog', type: 'shout', x: s.ballX - 0.5, y: 0.3, impulse: s.impulse, range: 1.2 } :
     s.action === 'release' ? { id: 'chog', type: 'release', x: s.ballX, y: s.ballY, propId: 'ball' } :
       s.action === 'laser' ? { id: 'chog', type: 'laser', x: 1, y: 2, length: 5, angle: s.angle } :
         s.action === 'lift' ? { id: 'chog', type: 'lift', x: s.ballX, y: 2, width: 1.5, height: 3, acceleration: s.acceleration, maxSpeed: 5 } :
           { id: 'chog', type: 'portal', x: s.ballX, y: 1.7, exitX: 5, exitY: s.exitY, radius: 0.4, quarterTurns: 0, cooldownTicks: 30 };
   const control: Control = s.action === 'release' ? { id: 'bounce', objectId: 'ball', field: 'restitution', min: 0, max: 0.95, default: s.restitution } :
     s.action === 'push' ? { id: 'strength', objectId: 'chog', field: 'impulse', min: 1, max: 8, default: s.impulse } :
+      s.action === 'shout' ? { id: 'shout-strength', objectId: 'chog', field: 'impulse', min: 1, max: 8, default: s.impulse } :
       s.action === 'lift' ? { id: 'lift-strength', objectId: 'chog', field: 'acceleration', min: 12, max: 24, default: s.acceleration } :
         { id: 'bounce', objectId: 'ball', field: 'restitution', min: 0, max: 0.95, default: s.restitution };
   if (s.action === 'laser') Object.assign(control, { id: 'aim', objectId: 'chog', field: 'angle', min: -0.6, max: 0.6, default: s.angle });
   const isBody = s.action === 'lift' || s.action === 'portal';
-  const output = { push: 'pushed', release: 'released', laser: 'fired', lift: 'lifted', portal: 'teleported' }[s.action];
+  const output = { push: 'pushed', shout: 'shouted', release: 'released', laser: 'fired', lift: 'lifted', portal: 'teleported' }[s.action];
   const content: PartContent = {
     kind: 'part', schemaVersion: 1, engineVersion: ENGINE_VERSION, rulesVersion: TRAIT_RULES_VERSION,
     partId: s.partId, author, source: source.pin, reuseAllowed: s.reuseAllowed, bounds: { width: 6, height: 6 },
     props: s.action === 'laser' ? [{ id: 'balloon', type: 'balloon', x: 4, y: 2, radius: 0.4 }] :
-      [{ id: 'ball', type: 'ball', x: s.ballX, y: s.action === 'push' ? 0.5 : s.action === 'lift' ? 1 : s.ballY, radius: 0.18, restitution: s.restitution },
+      [{ id: 'ball', type: 'ball', x: s.ballX, y: s.action === 'push' || s.action === 'shout' ? 0.5 : s.action === 'lift' ? 1 : s.ballY, radius: 0.18, restitution: s.restitution },
         ...(s.ramp ? [{ id: 'ramp', type: 'ramp' as const, x: 3, y: 1, width: 2, height: 0.15, angle: -0.35 }] : [])],
     actions: [action],
     sockets: [{ id: 'in', direction: 'input', kind: isBody ? 'body' : 'event', target: { objectId: 'chog', socket: isBody ? 'body' : 'trigger' } },
@@ -68,6 +71,12 @@ export function savePartSettings(storage: Pick<Storage, 'setItem'>, settings: Pa
 }
 export interface AuthoringSource { pin: SourcePin; metadata: Metadata }
 export const PART_SOURCE_KEY = 'chogmog.part-source.v1';
+export function previewPinToken(pin: SourcePin): '533' | '846' | undefined {
+  return (['533', '846'] as const).find((id) => canonicalJson(pin) === canonicalJson(previewSourcePin(id)));
+}
+export function checkedSourcePin(current: SourcePin, fresh: SourcePin): SourcePin {
+  return previewPinToken(current) === undefined && canonicalJson({ ...fresh, observedAt: current.observedAt }) === canonicalJson(current) ? current : fresh;
+}
 export function loadPartSource(storage: Pick<Storage, 'getItem'>): AuthoringSource {
   try {
     const raw = storage.getItem(PART_SOURCE_KEY);

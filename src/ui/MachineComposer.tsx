@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_TICKS, WORLD_HEIGHT, WORLD_WIDTH } from '../domain/fallingScene';
-import { MACHINE_DRAFT_KEY, loadMachineDraft, newMachineDraft, PREVIEW_ACTIONS, saveMachineDraft,
+import { MACHINE_DRAFT_KEY, loadMachineDraft, loadPreviewParts, newMachineDraft, PREVIEW_ACTIONS, saveMachineDraft,
   type Machine, type PreviewAction } from '../domain/machineDraft';
 import type { Connection, Endpoint, Prop, Scene } from '../domain/documents';
 import { MachineSandbox } from './MachineSandbox';
@@ -69,6 +69,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
     mounted.current = true;
     void MachineLibrary.create((id, source) => api(`/api/versions?id=${encodeURIComponent(id)}${source ? '&source=1' : ''}`), publishedMode ? 'published' : 'preview')
       .then(async (library) => {
+        for (const part of await loadPreviewParts(storage)) await library.addLocalPreviewPart(part);
         const id = publishedMode ? new URLSearchParams(location.search).get('version') : null;
         if (id) {
           const reopened = await library.reopen(id);
@@ -131,7 +132,7 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
       {!recovered && <p role="alert">The previous local draft or its exact sources could not be read or trusted. A fresh draft was opened without overwriting the saved one. No holder authority was restored.</p>}
       {!saved && <p role="alert">Local saving is unavailable. This draft still works in this tab, but a reload may lose your edits.</p>}
       {error && <p role="alert">Change rejected: {error}. Your last valid draft is kept.</p>}
-      <p role="status">{busy ? 'Checking and saving the exact draft…' : saved ? 'Local draft ready' : 'Draft not saved'}. {machine.scene.parts.length} reusable parts. Composition grants no holder authority.</p>
+      <p role="status">{busy ? 'Checking and saving the exact draft…' : saved ? 'Local draft ready' : 'Draft not saved'}. {machine.scene.parts.length} parts in this local draft. Composition grants no holder authority.</p>
       {publishedAt && <p className="breakable">Reopened exact published version {machine.id} from {publishedAt}. Editing starts a new machine ID for a remix and leaves the original unchanged.</p>}
       {machine.scene.remixOf && <p className="breakable">Remix lineage: <a href={`?harness=published&version=${encodeURIComponent(machine.scene.remixOf)}`}>{machine.scene.remixOf}</a>. Original source parts and credits remain pinned.</p>}
       {publishedAt && <button disabled={busy || running} onClick={() => {
@@ -174,6 +175,15 @@ export function MachineComposer({ publishedMode = false }: { publishedMode?: boo
             sourceKind === 'lift' ? { x: 4.5, y: 0 } : sourceKind === 'portal' ? { x: 6.5, y: 0 } : { x: 1, y: 1 };
           s.parts.push({ id: nextId(s, sourceKind), versionId: catalog.get(sourceKind).id, ...position, values: {} });
         })}>Add preview part</button></>}
+        {!publishedMode && catalog.previewParts.length > 0 && <fieldset>
+          <legend><span className="tape-inline">PREVIEW</span>Your preview parts</legend>
+          {catalog.previewParts.map((part) => <p key={part.id} className="breakable">
+            <span className="tape-inline">PREVIEW</span>{part.content.partId}, Chog {part.content.source.nft.tokenId}
+            <button disabled={busy || machine.scene.parts.length >= 6} onClick={() => void edit((s) => {
+              s.parts.push({ id: nextId(s, 'preview-part'), versionId: part.id, x: WORLD_WIDTH - part.content.bounds.width, y: 0, values: {} });
+            })}>Add to Build draft</button>
+          </p>)}
+        </fieldset>}
         {publishedMode && <>
           <p>Use an exact committed part ID from its author or browse the library below. No fixture can fill this genuine library.</p>
           <label>Published part version ID<input type="text" maxLength={71} value={partId} disabled={busy} onChange={(e) => setPartId(e.target.value)} /></label>

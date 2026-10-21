@@ -1,12 +1,13 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { GameController, SquaresFour, Wrench, type Icon } from '@phosphor-icons/react';
+import { GameController, IdentificationCard, SquaresFour, Wrench, type Icon } from '@phosphor-icons/react';
 import { applyCssVariables, colour } from './tokens';
 
-export type AppTab = 'play' | 'build' | 'gallery';
+export type AppTab = 'play' | 'build' | 'gallery' | 'chog';
 const TABS: { id: AppTab; label: string; href: string; icon: Icon }[] = [
   { id: 'play', label: 'Play', href: './', icon: GameController },
   { id: 'build', label: 'Build', href: '?harness=machine', icon: Wrench },
   { id: 'gallery', label: 'Gallery', href: '?harness=gallery', icon: SquaresFour },
+  { id: 'chog', label: 'My Chog', href: '?harness=chog', icon: IdentificationCard },
 ];
 
 export function AppFrame({ tab, layout, wall = colour.wall, onSignIn, children }: {

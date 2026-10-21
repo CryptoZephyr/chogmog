@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, injected } from './walletClient';
 import { PartAuthor } from './PartAuthor';
+import type { UsePreviewPart } from './PartAuthor';
 import type { ReactNode } from 'react';
 
-export function WalletPanel({ ownerTools = true, children }: { ownerTools?: boolean; children?: (address: string | null) => ReactNode }) {
+export function WalletPanel({ ownerTools = true, children, onUsePreviewPart }: {
+  ownerTools?: boolean; children?: (address: string | null) => ReactNode; onUsePreviewPart?: UsePreviewPart
+}) {
   const [address, setAddress] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState('846');
   const [observation, setObservation] = useState<string | null>(null);
@@ -92,7 +95,7 @@ export function WalletPanel({ ownerTools = true, children }: { ownerTools?: bool
     </label>
     <button disabled={busy || !address || !/^(0|[1-9][0-9]*)$/.test(selectedToken)} onClick={() => void checkOwnership()}>Check current ownership</button>
     {observation && <p role="status">{observation}</p>}
-    <PartAuthor key={address ?? 'signed-out'} address={address} /></>}
+    <PartAuthor key={address ?? 'signed-out'} address={address} onUsePreviewPart={onUsePreviewPart} /></>}
     {children?.(address)}
   </section>;
 }

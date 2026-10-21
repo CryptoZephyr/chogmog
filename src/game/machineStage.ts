@@ -34,6 +34,10 @@ export async function createMachineStage(canvas: HTMLCanvasElement, scene: Scene
     for (const node of simulation.nodes.values()) {
       if (node.type === 'lift') liftColumn(ctx, (node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
       if (node.type === 'portal') { portalRing(ctx, node.x * scale, y(node.y), node.radius * scale); portalRing(ctx, node.exitX * scale, y(node.exitY), node.radius * scale); }
+      if (node.type === 'shout') {
+        inkCircle(ctx, node.x * scale, y(node.y), node.range * scale, 'transparent', colour.ink, 2);
+        inkCircle(ctx, node.x * scale, y(node.y), node.range * scale * 0.68, 'transparent', colour.ink, 2);
+      }
       if (node.type === 'ramp') plank(ctx, node.x * scale, y(node.y), node.width * scale, node.height * scale, node.angle);
       if (node.type === 'sensor') plate(ctx, (node.x - node.width / 2) * scale, y(node.y + node.height / 2), node.width * scale, node.height * scale);
       if (node.type === 'lever') plank(ctx, node.x * scale, y(node.y), node.width * scale, node.height * scale, snapshot.bannerOpen ? 0.26 : -0.26);

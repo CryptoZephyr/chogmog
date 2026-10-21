@@ -26,6 +26,7 @@
 .app h1, .app h2, .app h3, .app p { margin: 0; }
 .app :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .app .panel { background: var(--panel); border: 2px solid var(--ink); border-radius: 4px; }
+.preview-banner { position: sticky; top: 12px; z-index: 5; padding: 14px; }
 
 .app .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 24px; padding: 0 16px; }
 .app .wordmark { font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: 0; text-transform: lowercase; color: var(--ink); text-decoration: none; position: relative; }

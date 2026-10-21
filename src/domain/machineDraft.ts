@@ -221,6 +221,30 @@ export async function addPreviewPartToDraft(storage: Pick<Storage, 'getItem' | '
   while (used.has(`preview-part-${suffix}`)) suffix++;
   scene.parts.push({ id: `preview-part-${suffix}`, versionId: version.id, ...position, values: {} });
   const valid = await catalog.validate(scene);
-  if (!await saveMachineDraft(storage, catalog, valid.scene)) return { ok: false, message: 'The preview part was saved locally, but the Build draft could not be saved.' };
+  if (!await saveMachineDraft(storage, catalog, valid.scene)) return { ok: false, message: 'The Build draft could not be saved, so nothing was changed.' };
   return { ok: true, message: 'Preview part added to your Build draft.' };
+}
+
+export async function placePreviewPartInDraft(storage: Pick<Storage, 'getItem' | 'setItem'>,
+  createCatalog: () => Promise<DraftCatalog & Pick<PreviewCatalog, 'get' | 'addLocalPreviewPart'>>,
+  version: PartVersion): Promise<{ ok: boolean; message: string }> {
+  const catalog = await createCatalog();
+  for (const part of await loadPreviewParts(storage)) await catalog.addLocalPreviewPart(part);
+  const current = await loadMachineDraft(storage, catalog);
+  if (!current.recovered) return { ok: false, message: 'The saved Build draft could not be verified, so it was left unchanged.' };
+  if (current.machine.scene.parts.length >= PREVIEW_PART_LIMIT) return { ok: false, message: 'Your Build draft already has six parts. Remove one in Build before adding this preview part.' };
+  const previous = storage.getItem(PREVIEW_PARTS_KEY);
+  const restore = (message: string) => {
+    try { storage.setItem(PREVIEW_PARTS_KEY, previous ?? '[]'); return { ok: false, message }; }
+    catch { return { ok: false, message: 'Your Build draft was not changed, but this browser could not restore your saved preview parts.' }; }
+  };
+  if (!await savePreviewPart(storage, version)) return restore('This browser could not safely replace a saved preview part.');
+  try {
+    const updated = await createCatalog();
+    for (const part of await loadPreviewParts(storage)) await updated.addLocalPreviewPart(part);
+    const result = await addPreviewPartToDraft(storage, updated, version);
+    return result.ok ? result : restore(result.message);
+  } catch {
+    return restore('This preview part would push your Build draft past its limits, so nothing was changed.');
+  }
 }

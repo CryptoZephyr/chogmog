@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { addPreviewPartToDraft, PreviewCatalog, loadMachineDraft, loadPreviewParts, MACHINE_DRAFT_KEY, newMachineDraft, parsePreviewParts,
+import { addPreviewPartToDraft, placePreviewPartInDraft, PreviewCatalog, loadMachineDraft, loadPreviewParts, MACHINE_DRAFT_KEY, newMachineDraft, parsePreviewParts,
   PREVIEW_PARTS_KEY, PREVIEW_PART_LIMIT, saveMachineDraft, savePreviewPart } from '../src/domain/machineDraft';
 import { createPartVersion, previewSourcePin, resolvePreviewSource, validateMachine, type PartContent, type PartVersion, type Scene } from '../src/domain/documents';
 import { contentId } from '../src/domain/canonical';
@@ -7,6 +7,23 @@ import { MachineLibrary } from '../src/domain/machineLibrary';
 import { PART_DRAFT_KEY } from '../src/domain/partAuthoring';
 
 const edit = (scene: Scene): Scene => structuredClone(scene);
+const memoryStorage = () => {
+  const data = new Map<string, string>();
+  return { data, storage: { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } } };
+};
+const rejectingCatalog = (versionId: string) => async () => {
+  const catalog = await PreviewCatalog.create();
+  return {
+    get: catalog.get.bind(catalog),
+    resolvePart: catalog.resolvePart,
+    resolveSource: catalog.resolveSource,
+    validate: (scene: Scene, purpose?: 'draft' | 'publication') => {
+      if (scene.parts.some((part) => part.versionId === versionId)) throw new Error('Preview part exceeds the scene limit');
+      return catalog.validate(scene, purpose);
+    },
+    addLocalPreviewPart: catalog.addLocalPreviewPart.bind(catalog),
+  };
+};
 
 describe('free machine composition', () => {
   test('pins exact public-data sources and a useful preview chain without holder authority', async () => {
@@ -170,5 +187,50 @@ describe('free machine composition', () => {
     const rejected = await addPreviewPartToDraft(storage, catalog, catalog.get('shout'));
     expect(rejected).toMatchObject({ ok: false, message: expect.stringContaining('six parts') });
     expect(data.get(MACHINE_DRAFT_KEY)).toBe(before);
+  });
+
+  test('rolls back an evicted preview part when adding the new part fails validation', async () => {
+    const catalog = await PreviewCatalog.create();
+    const source = catalog.get('shout');
+    const savedParts = await Promise.all(Array.from({ length: PREVIEW_PART_LIMIT }, (_, index) =>
+      createPartVersion({ ...source.content, partId: `local-shout-${index}` }, resolvePreviewSource)));
+    const version = await createPartVersion({ ...source.content, partId: 'local-shout-rejected' }, resolvePreviewSource);
+    const { data, storage } = memoryStorage();
+    data.set(PREVIEW_PARTS_KEY, JSON.stringify(savedParts));
+    expect(await saveMachineDraft(storage, catalog, newMachineDraft(catalog))).toBe(true);
+    const previousParts = data.get(PREVIEW_PARTS_KEY), previousDraft = data.get(MACHINE_DRAFT_KEY);
+
+    const result = await placePreviewPartInDraft(storage, rejectingCatalog(version.id), version);
+
+    expect(result).toEqual({ ok: false, message: 'This preview part would push your Build draft past its limits, so nothing was changed.' });
+    expect(data.get(PREVIEW_PARTS_KEY)).toBe(previousParts);
+    expect(data.get(MACHINE_DRAFT_KEY)).toBe(previousDraft);
+  });
+
+  test('restores an absent preview store after adding the new part fails validation', async () => {
+    const catalog = await PreviewCatalog.create();
+    const version = await createPartVersion({ ...catalog.get('shout').content, partId: 'local-shout-rejected' }, resolvePreviewSource);
+    const { data, storage } = memoryStorage();
+    expect(data.has(PREVIEW_PARTS_KEY)).toBe(false);
+
+    const result = await placePreviewPartInDraft(storage, rejectingCatalog(version.id), version);
+
+    expect(result.ok).toBe(false);
+    expect(await loadPreviewParts(storage)).toEqual([]);
+  });
+
+  test('stores a preview part and adds it to the Build draft', async () => {
+    const catalog = await PreviewCatalog.create();
+    const version = await createPartVersion({ ...catalog.get('shout').content, partId: 'local-shout-success' }, resolvePreviewSource);
+    const { storage } = memoryStorage();
+
+    const result = await placePreviewPartInDraft(storage, () => PreviewCatalog.create(), version);
+
+    expect(result.ok).toBe(true);
+    expect((await loadPreviewParts(storage)).map((part) => part.id)).toContain(version.id);
+    const updated = await PreviewCatalog.create();
+    for (const part of await loadPreviewParts(storage)) await updated.addLocalPreviewPart(part);
+    const draft = await loadMachineDraft(storage, updated);
+    expect(draft.machine.scene.parts.map((part) => part.versionId)).toContain(version.id);
   });
 });
